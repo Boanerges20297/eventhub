@@ -108,5 +108,20 @@ variaveis privadas do container; nao exporta segredos. Usa contas sinteticas.
 A configuracao do cookie desativa Secure apenas no loopback HTTP local;
 na exposicao HTTPS deve voltar a Secure=true.
 
+## Evidencia HTTP ponta a ponta — notebook (02/11/2026)
+
+Com os nove containers em execucao, o comando de teste do gateway retornou:
+HTTP_E2E_OK event=6a71bafe-fa15-4f8b-b8e7-6aa3f081da78
+activity=c0d02d2e-35a8-4d55-824b-f912b0700cd9
+
+Verificacoes reais: Argon2id/JWT, CSRF, RBAC, ownership, idempotencia,
+criacao de evento/atividade com sincronizacao de capacidade, dois pedidos
+RESERVADO e terceiro EM_FILA, cancelamento e promocao automatica do terceiro.
+
+O servico Events falhou na primeira inicializacao por privilegio REFERENCES
+faltante no seu banco isolado. Concedido REFERENCES somente a eventhub_events,
+sem remover volumes, e corrigido infra/mysql/10-service-databases.sh para
+novas instalacoes. Apos a correcao, Eventos, gateway e Caddy ficaram saudaveis.
+
 Pendencias: pagamentos simulados, notificacoes/outbox, contingencia,
-validacao final do navegador e evidencia do teste HTTP.
+validacao visual posterior ao MVP e regras completas de conflito financeiro.

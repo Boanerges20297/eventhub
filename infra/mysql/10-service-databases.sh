@@ -19,7 +19,7 @@ CREATE USER IF NOT EXISTS 'eventhub_events'@'%' IDENTIFIED BY '$EVENTHUB_MYSQL_E
 CREATE USER IF NOT EXISTS 'eventhub_payments'@'%' IDENTIFIED BY '$EVENTHUB_MYSQL_PAYMENTS_PASSWORD';
 CREATE USER IF NOT EXISTS 'eventhub_notifications'@'%' IDENTIFIED BY '$EVENTHUB_MYSQL_NOTIFICATIONS_PASSWORD';
 GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX ON eventhub_identity.* TO 'eventhub_identity'@'%';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX ON eventhub_events.* TO 'eventhub_events'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES ON eventhub_events.* TO 'eventhub_events'@'%';
 GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX ON eventhub_payments.* TO 'eventhub_payments'@'%';
 GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX ON eventhub_notifications.* TO 'eventhub_notifications'@'%';
 SQL
