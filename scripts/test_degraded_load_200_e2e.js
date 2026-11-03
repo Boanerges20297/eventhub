@@ -76,7 +76,10 @@ async function setup(){
 async function during(){
   const s=load();assert.equal(s.users.length,PEOPLE);
   const start=Date.now();
-  const keys=s.users.map(()=>crypto.randomUUID());
+  // Persistir antes do envio: 503/timeout nao prova que o ticket nao foi gravado.
+  // Um replay seguro reutiliza EXATAMENTE a mesma chave da primeira intencao.
+  const keys=s.keys||s.users.map(()=>crypto.randomUUID());
+  s.keys=keys;save(s);
   const attempted=await Promise.allSettled(s.users.map((p,i)=>{
     const c=new Client(p.cookie,p.csrf);
     return c.request('POST','/inscricoes',{atividade_id:s.activity,cpf:cpf(i)},keys[i]);

@@ -19,12 +19,12 @@ function originOK(request){
     return src.host===host && (src.protocol==='https:' || (!secure && src.protocol==='http:'));
   }catch{return false;}
 }
-async function requestTo(url,method,body,principal){
+async function requestTo(url,method,body,principal,timeoutMs=5000){
   try {
     const r=await fetch(url,{method,headers:{
       ...asHeaders(principal),'content-type':'application/json'
     },body:(method==='GET'||method==='HEAD')?undefined:JSON.stringify(body||{}),
-      signal:AbortSignal.timeout(5000)});
+      signal:AbortSignal.timeout(timeoutMs)});
     const data=await r.json().catch(()=>({error:'RESPOSTA_INVALIDA'}));
     return {status:r.status,data};
   } catch {return {status:503,data:{error:'SERVICO_INDISPONIVEL'}};}
@@ -98,7 +98,11 @@ function install(server){
       if(method==='POST'&&(path==='/inscricoes'||/^\/pagamentos\/[^/]+\/simular$/.test(path))){
         body.idempotency_key=request.headers['idempotency-key'];
       }
-      const r=await requestTo(base+route,method,body,p);
+      // Inscricoes usam registro duravel; sob grande carga o SQLite pode
+      // confirmar o ticket apos o timeout curto do proxy. Nao responder 503
+      // prematuramente quando o backend ainda esta processando o pedido.
+      const timeoutMs=path==='/inscricoes' && method==='POST' ? 45000 : 5000;
+      const r=await requestTo(base+route,method,body,p,timeoutMs);
       return reply.code(r.status).send(r.data);
     }
     return reply.code(404).send({error:'ROTA_NAO_ENCONTRADA'});
