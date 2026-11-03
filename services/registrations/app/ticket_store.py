@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import json
 import sqlite3
+import time
 import uuid
 from dataclasses import dataclass
 from contextlib import contextmanager
@@ -105,7 +106,51 @@ class TicketStore:
                   WHERE status IN ('REGISTRADO','EM_FILA','RESERVADO','EM_VERIFICACAO','CONFIRMADO');
                 CREATE INDEX IF NOT EXISTS idx_fifo
                   ON ticket_requests(atividade_id, numero_ticket);
+                CREATE TABLE IF NOT EXISTS published_activities (
+                    atividade_id TEXT PRIMARY KEY,
+                    publication_version INTEGER NOT NULL CHECK (publication_version > 0),
+                    verified_at INTEGER NOT NULL
+                );
             """)
+
+    def remember_published(self, atividade_id: str, version: int) -> None:
+        """Espelha somente publicacao ja confirmada por Eventos no SQLite.
+
+        A sincronizacao de capacidade nao chama este metodo: criar capacidade
+        ainda nao significa que a atividade esteja publicada.
+        """
+        if not atividade_id or version < 1:
+            raise TicketError("PUBLICACAO_INVALIDA")
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO published_activities
+                   (atividade_id, publication_version, verified_at) VALUES (?,?,?)
+                   ON CONFLICT(atividade_id) DO UPDATE SET
+                   publication_version=MAX(publication_version,excluded.publication_version),
+                   verified_at=excluded.verified_at""",
+                (atividade_id, int(version), int(time.time()))
+            )
+
+    def forget_published(self, atividade_id: str) -> None:
+        """Resposta explicita de nao-publicacao prevalece sobre cache."""
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM published_activities WHERE atividade_id=?", (atividade_id,)
+            )
+
+    def recently_published(self, atividade_id: str, max_age_seconds: int = 86400) -> bool:
+        """Falha fechada em atividade desconhecida, expirada ou clock retrocedido."""
+        if max_age_seconds <= 0:
+            return False
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT verified_at FROM published_activities WHERE atividade_id=?",
+                (atividade_id,)
+            ).fetchone()
+        if row is None:
+            return False
+        age = int(time.time()) - int(row["verified_at"])
+        return 0 <= age <= min(max_age_seconds, 86400)
 
     def _digest(self, cpf: str) -> str:
         return hmac.new(self.key, cpf.encode("ascii"), hashlib.sha256).hexdigest()

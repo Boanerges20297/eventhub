@@ -13,6 +13,22 @@ function authorized(request, reply, roles=[]) {
   return p;
 }
 function isOwner(p,org) { return p.role === 'admin' || (p.role==='organizer' && p.org_id===org); }
+// Espelho em SQLite apenas DEPOIS de Eventos confirmar sua publicacao.
+// Falha aqui nao muda a verdade no MySQL de Eventos: a API pode preencher
+// o cache ao receber uma validacao positiva posterior. Sem cache, falha fechada.
+async function mirrorPublication(id, version) {
+  try {
+    const response=await fetch(
+      (process.env.REGISTRATIONS_URL||'http://registrations:8000')+'/internal/publicacoes',{
+        method:'POST',
+        headers:{...asHeaders(null),'content-type':'application/json'},
+        body:JSON.stringify({atividade_id:id, capacidade_version:Number(version)}),
+        signal:AbortSignal.timeout(3000)
+      }
+    );
+    return response.ok;
+  } catch { return false; }
+}
 async function capacitySync(row) {
   const response=await fetch((process.env.REGISTRATIONS_URL||'http://registrations:8000')+'/internal/capacidades',{
     method:'POST',headers:{...asHeaders(null),'content-type':'application/json'},
@@ -30,6 +46,7 @@ async function capacitySync(row) {
     "UPDATE activities SET capacity_version=?,capacity_state='CONCLUIDA' WHERE id=? AND operation_id=?",
     [data.version,row.id,row.operation_id]
   );
+  await mirrorPublication(row.id, data.version);
   return {ok:true,version:data.version};
 }
 async function activityById(id) {
@@ -104,7 +121,10 @@ function install(server){
     const row=await activityById(request.params.id);
     if(!row)return reply.code(404).send({error:'ATIVIDADE_NAO_ENCONTRADA'});
     if(!isOwner(p,row.org_id))return reply.code(403).send({error:'SEM_PERMISSAO'});
-    if(row.capacity_state==='CONCLUIDA')return {sincronizacao:'CONCLUIDA',capacidade_version:row.capacity_version};
+    if(row.capacity_state==='CONCLUIDA'){
+      await mirrorPublication(row.id,row.capacity_version);
+      return {sincronizacao:'CONCLUIDA',capacidade_version:row.capacity_version};
+    }
     let synced;try{synced=await capacitySync(row);}catch{synced={ok:false};}
     return reply.code(synced.ok?200:202).send({sincronizacao:synced.ok?'CONCLUIDA':'PENDENTE'});
   });

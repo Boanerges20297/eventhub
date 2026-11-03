@@ -74,6 +74,11 @@ class CapacityOp(BaseModel):
     atividade_paga: bool = False
 
 
+class PublishedActivity(BaseModel):
+    atividade_id: str = Field(min_length=1, max_length=64)
+    capacidade_version: int = Field(ge=1)
+
+
 class Register(BaseModel):
     atividade_id: str = Field(min_length=1, max_length=64)
     cpf: str = Field(min_length=11, max_length=20)
@@ -115,25 +120,64 @@ def sync_capacity(op: CapacityOp, request: Request):
         raise HTTPException(409, detail=exc.code) from None
 
 
+@app.post("/internal/publicacoes")
+def record_publication(data: PublishedActivity, request: Request):
+    # Somente servicos com a chave interna podem declarar publicacao.
+    # Eventos chama esta rota APOS o commit que marca a atividade publicada.
+    caller(request)
+    queue().remember_published(data.atividade_id, data.capacidade_version)
+    return {"result":"REGISTRADA"}
+
+
 @app.post("/internal/inscricoes", status_code=202)
 async def register(data: Register, request: Request):
     user = caller(request)
     if not user or user["role"] not in ("participant","admin"):
         raise HTTPException(403, detail="SEM_PERMISSAO")
-    # Confirmar publicacao no dominio Eventos. A mera linha no MySQL
-    # de Inscricoes nao significa que Eventos publicou a atividade.
+    # Eventos e a autoridade de publicacao. O cache duravel so recebe
+    # atividade publicada apos confirmacao em Eventos; nunca por mera
+    # sincronizacao de capacidade MySQL.
     url = os.environ.get("EVENTHUB_EVENTS_URL", "http://events:3000")
     headers = {"x-eventhub-internal-key": os.environ["EVENTHUB_INTERNAL_SECRET"]}
+    degraded = False
+    response = None
     try:
         async with httpx.AsyncClient(timeout=4) as client:
             response = await client.get(
                 f"{url}/internal/atividades/{data.atividade_id}",
                 headers=headers
             )
-    except httpx.HTTPError:
-        raise HTTPException(503, detail="EVENTOS_INDISPONIVEL") from None
-    if response.status_code != 200:
-        raise HTTPException(409, detail="ATIVIDADE_NAO_PUBLICADA")
+    except httpx.RequestError:
+        degraded = True
+
+    if response is not None:
+        if response.status_code == 200:
+            try:
+                published = response.json()
+                valid = (published.get("publicada") is True
+                         and published.get("atividade_id") == data.atividade_id
+                         and type(published.get("capacidade_version")) is int
+                         and published["capacidade_version"] > 0)
+            except (ValueError, TypeError, AttributeError):
+                valid = False
+            if not valid:
+                queue().forget_published(data.atividade_id)
+                raise HTTPException(409, detail="ATIVIDADE_NAO_PUBLICADA")
+            queue().remember_published(data.atividade_id,
+                                       published["capacidade_version"])
+        elif response.status_code in (404, 410):
+            queue().forget_published(data.atividade_id)
+            raise HTTPException(409, detail="ATIVIDADE_NAO_PUBLICADA")
+        elif response.status_code >= 500:
+            degraded = True
+        else:
+            # Uma resposta de autorizacao/validacao nao pode ser contornada
+            # por uma copia antiga da publicacao.
+            raise HTTPException(503, detail="VALIDACAO_EVENTOS_INDISPONIVEL")
+
+    if degraded and not queue().recently_published(data.atividade_id):
+        # Nao adivinha publicacao nem transforma capacidade em permissao.
+        raise HTTPException(503, detail="PUBLICACAO_NAO_VERIFICAVEL")
     try:
         ticket = queue().issue(
             user_id=user["sub"],
@@ -149,9 +193,14 @@ async def register(data: Register, request: Request):
         "numero_ticket":ticket.numero_ticket,
         "atividade_id":ticket.atividade_id,
         "estado":ticket.status,
-        "mensagem":("Sua solicitacao de vaga foi registrada. "
-                    "O resultado sera atualizado no painel de tickets "
-                    "e nas notificacoes simuladas da sua conta."),
+        "modo_degradado": degraded,
+        "mensagem":(("Sua solicitacao foi registrada localmente durante "
+                     "uma indisponibilidade. Guarde o numero do ticket; "
+                     "a confirmacao da vaga sera processada apos a recuperacao.")
+                    if degraded else
+                    ("Sua solicitacao de vaga foi registrada. "
+                     "O resultado sera atualizado no painel de tickets "
+                     "e nas notificacoes simuladas da sua conta.")),
     }
 
 
