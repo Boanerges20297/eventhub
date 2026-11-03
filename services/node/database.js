@@ -22,6 +22,21 @@ async function init(service) {
       org_id VARCHAR(64), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB`);
   }
+  if (service === 'payments') {
+    await db().query(`CREATE TABLE IF NOT EXISTS payment_attempts (
+      id CHAR(36) NOT NULL PRIMARY KEY,
+      inscricao_id CHAR(36) NOT NULL UNIQUE,
+      user_id CHAR(36) NOT NULL,
+      outcome VARCHAR(32) NOT NULL,
+      paid_at DATETIME(6) NULL,
+      delivery VARCHAR(20) NOT NULL DEFAULT 'PENDENTE',
+      registration_status VARCHAR(24) NULL,
+      created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+      updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+        ON UPDATE CURRENT_TIMESTAMP(6),
+      INDEX idx_payment_retry (delivery,created_at)
+    ) ENGINE=InnoDB`);
+  }
   if (service === 'events') {
     await db().query(`CREATE TABLE IF NOT EXISTS events (
       id CHAR(36) PRIMARY KEY, owner_id CHAR(36) NOT NULL,

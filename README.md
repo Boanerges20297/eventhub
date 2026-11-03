@@ -4,7 +4,9 @@ Trabalho 2 da disciplina **Arquitetura de Software** (Mestrado UECE), entrega pr
 
 ## Estado atual
 
-Implementacao **iniciada e autorizada em 02/11/2026**. O primeiro modulo concluido e testado e o emissor persistente de tickets FIFO do servico Inscricoes. **O MVP integrado e o deploy ainda nao estao prontos.**
+O fluxo HTTP autenticado de organizacao, atividade, inscricao, cancelamento e promocao FIFO foi validado no notebook; pagamentos simulados estao em integracao e notificacoes/outbox continuam pendentes. **O MVP completo e o deploy em producao ainda nao estao prontos.**
+
+**Checkpoint operacional:** [docs/CHECKPOINT_2026-11-02.md](docs/CHECKPOINT_2026-11-02.md) — evidencias, pendencias, comandos de recuperacao e proximas prioridades ate 06/11.
 
 ## Estrutura
 

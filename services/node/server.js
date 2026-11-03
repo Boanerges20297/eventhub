@@ -18,6 +18,9 @@ async function start(){
   }else if(service==='events'){
     await init(service);
     require('./events').install(server);
+  }else if(service==='payments'){
+    await init(service);
+    require('./payments').install(server);
   }else if(service==='gateway'){
     require('./gateway').install(server);
   }

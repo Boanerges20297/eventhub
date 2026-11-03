@@ -10,6 +10,7 @@ import hmac
 import json
 import os
 import uuid
+from datetime import datetime
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -167,6 +168,70 @@ def read_registration(inscricao_id: str, request: Request):
         "estado":ticket.status,
     }
 
+
+
+class StartPayment(BaseModel):
+    attempt_id: uuid.UUID
+
+
+class PaymentEvent(BaseModel):
+    event_id: uuid.UUID
+    attempt_id: uuid.UUID
+    resultado: str = Field(min_length=2, max_length=32)
+    pago_em: datetime | None = None
+
+
+@app.get("/internal/inscricoes/{inscricao_id}/pagamento")
+def payment_context(inscricao_id: str, request: Request):
+    user = caller(request)
+    if not user or not queue().get_owned(inscricao_id, user["sub"]):
+        raise HTTPException(404, detail="INSCRICAO_NAO_ENCONTRADA")
+    details = capacity().payment_context(inscricao_id, user["sub"])
+    if not details:
+        raise HTTPException(409, detail="PEDIDO_AGUARDANDO_PROCESSAMENTO")
+    if not details["atividade_paga"]:
+        raise HTTPException(409, detail="ATIVIDADE_GRATUITA")
+    return details
+
+
+@app.post("/internal/inscricoes/{inscricao_id}/inicio-pagamento")
+def begin_payment(inscricao_id: str, data: StartPayment, request: Request):
+    user = caller(request)
+    if not user or not queue().get_owned(inscricao_id, user["sub"]):
+        raise HTTPException(404, detail="INSCRICAO_NAO_ENCONTRADA")
+    try:
+        state = capacity().start_payment(inscricao_id)
+        try:
+            queue().sync_authoritative(inscricao_id, state)
+        except (TicketError, OSError):
+            pass  # O worker recupera o ACK depois do commit MySQL.
+        return {"inscricao_id": inscricao_id, "estado": state,
+                "tentativa_id": str(data.attempt_id)}
+    except CapacityError as exc:
+        raise HTTPException(409, detail=exc.code) from None
+
+
+@app.post("/internal/inscricoes/{inscricao_id}/resultado-pagamento")
+def payment_result(inscricao_id: str, data: PaymentEvent, request: Request):
+    user = caller(request)
+    if not user or not queue().get_owned(inscricao_id, user["sub"]):
+        raise HTTPException(404, detail="INSCRICAO_NAO_ENCONTRADA")
+    try:
+        state, released = capacity().settle_payment(
+            event_id=str(data.event_id),
+            attempt_id=str(data.attempt_id),
+            inscricao_id=inscricao_id,
+            outcome=data.resultado,
+            paid_at=data.pago_em,
+        )
+        try:
+            queue().sync_authoritative(inscricao_id, state)
+        except (TicketError, OSError):
+            pass  # A confirmacao permanece no MySQL, reconciliavel pelo worker.
+        return {"inscricao_id": inscricao_id, "estado": state,
+                "vaga_liberada": released}
+    except CapacityError as exc:
+        raise HTTPException(409, detail=exc.code) from None
 
 @app.post("/internal/inscricoes/{inscricao_id}/cancelar")
 def cancel_registration(inscricao_id: str, request: Request, _data: Cancel):

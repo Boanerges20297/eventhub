@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable, Iterator
 
 OCCUPIED = ("RESERVADO", "EM_VERIFICACAO", "CONFIRMADO")
@@ -286,6 +287,168 @@ class CapacityStore:
                     (destination, inscricao_id),
                 )
             return True, self._promote_locked(cursor, settings)
+
+    def payment_context(self, inscricao_id: str, user_id: str) -> dict | None:
+        """Consulta titular/limite no banco proprio, sem acessar Pagamentos."""
+        with self._transaction() as cursor:
+            cursor.execute(
+                """SELECT r.status, r.inscricao_id, r.atividade_id, r.reserva_expira_em,
+                          a.atividade_paga
+                   FROM registrations r JOIN activity_capacity a
+                     ON a.atividade_id = r.atividade_id
+                   WHERE r.inscricao_id=%s AND r.user_id=%s""",
+                (inscricao_id, user_id),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            deadline = row["reserva_expira_em"]
+            return {
+                "inscricao_id": row["inscricao_id"],
+                "atividade_id": row["atividade_id"],
+                "status": row["status"],
+                "atividade_paga": bool(row["atividade_paga"]),
+                "reserva_expira_em": deadline.replace(tzinfo=timezone.utc).isoformat()
+                    if deadline is not None else None,
+            }
+
+    def start_payment(self, inscricao_id: str) -> str:
+        """Marca reserva como EM_VERIFICACAO antes de avaliar o provedor.
+
+        Protege vaga de expiracao concorrente: lock da atividade sempre primeiro.
+        """
+        with self._transaction() as cursor:
+            cursor.execute(
+                "SELECT atividade_id FROM registrations WHERE inscricao_id=%s",
+                (inscricao_id,),
+            )
+            found = cursor.fetchone()
+            if not found:
+                raise CapacityError("INSCRICAO_INEXISTENTE")
+            activity = found["atividade_id"]
+        with self._transaction() as cursor:
+            if not self._capacity_row(cursor, activity):
+                raise CapacityError("ATIVIDADE_NAO_SINCRONIZADA")
+            cursor.execute(
+                """SELECT r.status,r.reserva_expira_em,a.atividade_paga
+                   FROM registrations r JOIN activity_capacity a
+                   ON a.atividade_id=r.atividade_id
+                   WHERE r.inscricao_id=%s FOR UPDATE""", (inscricao_id,),
+            )
+            state = cursor.fetchone()
+            if not state["atividade_paga"]:
+                raise CapacityError("ATIVIDADE_GRATUITA")
+            if state["status"] == "EM_VERIFICACAO":
+                return "EM_VERIFICACAO"
+            if state["status"] != "RESERVADO":
+                raise CapacityError("RESERVA_NAO_DISPONIVEL")
+            cursor.execute(
+                """UPDATE registrations SET status='EM_VERIFICACAO'
+                   WHERE inscricao_id=%s AND status='RESERVADO'
+                   AND reserva_expira_em>UTC_TIMESTAMP(6)""",
+                (inscricao_id,),
+            )
+            if cursor.rowcount != 1:
+                raise CapacityError("RESERVA_EXPIRADA")
+            return "EM_VERIFICACAO"
+
+    def _ensure_payment_ledger(self) -> None:
+        """Migracao aditiva idempotente na propria base de Inscricoes.
+
+        A DDL e executada fora da transacao decisoria; nunca durante
+        o lock da capacidade nem em banco de outro servico.
+        """
+        with self._transaction() as cursor:
+            cursor.execute(
+                """CREATE TABLE IF NOT EXISTS payment_events (
+                   event_id CHAR(36) NOT NULL PRIMARY KEY,
+                   attempt_id CHAR(36) NOT NULL,
+                   inscricao_id CHAR(36) NOT NULL,
+                   outcome VARCHAR(32) NOT NULL,
+                   paid_at DATETIME(6) NULL,
+                   registration_status VARCHAR(24) NOT NULL,
+                   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                   INDEX idx_financial_attempt (attempt_id),
+                   CONSTRAINT fk_payment_registration FOREIGN KEY (inscricao_id)
+                     REFERENCES registrations(inscricao_id)
+                   ) ENGINE=InnoDB"""
+            )
+
+    def settle_payment(self, *, event_id: str, attempt_id: str,
+                       inscricao_id: str, outcome: str,
+                       paid_at: datetime | None = None) -> tuple[str, bool]:
+        """Evento financeiro idempotente; commit de estado e ledger atomicos.
+
+        A prova do horario vem exclusivamente do servico Pagamentos simulado.
+        Uma segunda decisao divergente nunca reabre reserva ja liberada.
+        """
+        from .payment_rules import payment_decision, PaymentRuleError
+        if not event_id or not attempt_id or not inscricao_id:
+            raise CapacityError("IDENTIFICADOR_INVALIDO")
+        self._ensure_payment_ledger()
+        with self._transaction() as cursor:
+            cursor.execute(
+                "SELECT atividade_id FROM registrations WHERE inscricao_id=%s",
+                (inscricao_id,),
+            )
+            found = cursor.fetchone()
+            if not found:
+                raise CapacityError("INSCRICAO_INEXISTENTE")
+            activity = found["atividade_id"]
+        with self._transaction() as cursor:
+            settings = self._capacity_row(cursor, activity)
+            if not settings:
+                raise CapacityError("ATIVIDADE_NAO_SINCRONIZADA")
+            cursor.execute(
+                "SELECT * FROM payment_events WHERE event_id=%s FOR UPDATE",
+                (event_id,),
+            )
+            prior = cursor.fetchone()
+            if prior:
+                if (prior["attempt_id"] != attempt_id
+                    or prior["inscricao_id"] != inscricao_id
+                    or prior["outcome"] != outcome
+                    or (prior["paid_at"] is None) != (paid_at is None)
+                    or (paid_at is not None and
+                        prior["paid_at"] != paid_at.astimezone(timezone.utc)
+                          .replace(tzinfo=None))):
+                    raise CapacityError("EVENTO_REUTILIZADO_COM_DADOS_DIFERENTES")
+                return prior["registration_status"], False
+            cursor.execute(
+                """SELECT status,reserva_expira_em FROM registrations
+                   WHERE inscricao_id=%s FOR UPDATE""", (inscricao_id,),
+            )
+            current = cursor.fetchone()
+            if current["status"] != "EM_VERIFICACAO":
+                raise CapacityError("ESTADO_FINANCEIRO_INCOMPATIVEL")
+            deadline = current["reserva_expira_em"]
+            if deadline is None:
+                raise CapacityError("PRAZO_AUSENTE")
+            try:
+                decision = payment_decision(
+                    registration_status=current["status"], outcome=outcome,
+                    reservation_deadline=deadline.replace(tzinfo=timezone.utc),
+                    paid_at=paid_at,
+                )
+            except PaymentRuleError as error:
+                raise CapacityError(str(error)) from error
+            target = decision.registration_status
+            if target != current["status"]:
+                cursor.execute(
+                    "UPDATE registrations SET status=%s WHERE inscricao_id=%s",
+                    (target, inscricao_id),
+                )
+            cursor.execute(
+                """INSERT INTO payment_events
+                   (event_id,attempt_id,inscricao_id,outcome,paid_at,registration_status)
+                   VALUES (%s,%s,%s,%s,%s,%s)""",
+                (event_id, attempt_id, inscricao_id, outcome,
+                 paid_at.astimezone(timezone.utc).replace(tzinfo=None)
+                 if paid_at else None, target),
+            )
+            if decision.frees_seat:
+                self._promote_locked(cursor, settings)
+            return target, decision.frees_seat
 
     def waiting_activities(self, limit: int = 100) -> list[str]:
         """Candidatas a promocao quando uma vaga for liberada ou capacidade subir."""

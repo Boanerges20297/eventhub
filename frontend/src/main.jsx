@@ -101,6 +101,14 @@ function App(){
       setMyTickets(old=>old.map(item=>item.inscricao_id===id?{...item,...data}:item));
     }catch(e){setMessage(e.message);}
   }
+  async function simulatePayment(id, outcome){
+    try{
+      const result=await api('/pagamentos/'+id+'/simular',
+        'POST',{resultado:outcome},crypto.randomUUID());
+      setMessage('Simulacao '+outcome+': '+(result.estado_inscricao||result.error||'PENDENTE'));
+      await refreshTicket(id);
+    }catch(e){setMessage(e.message);}
+  }
   const organizer=user && ['organizer','admin'].includes(user.role);
   const participant=user && ['participant','admin'].includes(user.role);
   const box={border:'1px solid #d5dfe8',borderRadius:12,padding:20,background:'#fff'};
@@ -163,9 +171,14 @@ function App(){
         {myTickets.map(t=><p key={t.inscricao_id}>
           <strong>Ticket {t.numero_ticket}</strong> — {t.estado}
           <button style={{...button,marginLeft:8}} onClick={()=>refreshTicket(t.inscricao_id)}>Consultar</button>
+          {t.estado==='RESERVADO'&&<span style={{display:'inline-flex',gap:6,flexWrap:'wrap',marginTop:8}}>
+            <button style={button} onClick={()=>simulatePayment(t.inscricao_id,'PAGO')}>Simular aprovado</button>
+            <button style={button} onClick={()=>simulatePayment(t.inscricao_id,'RECUSADO_DEFINITIVO')}>Simular recusa</button>
+            <button style={button} onClick={()=>simulatePayment(t.inscricao_id,'INDETERMINADO')}>Simular incerteza</button>
+          </span>}
         </p>)}
       </section>}
-      <p style={{color:'#718593',fontSize:13,marginTop:24}}>Interface de teste funcional. Pagamentos e notificacoes permanecem em desenvolvimento.</p>
+      <p style={{color:'#718593',fontSize:13,marginTop:24}}>Interface de teste funcional. Pagamentos sao simulados, sem cobranca real. Notificacoes e contingencia permanecem em desenvolvimento.</p>
     </div>
   </main>;
 }

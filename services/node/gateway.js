@@ -41,6 +41,8 @@ function install(server){
     ['POST', /^\/atividades\/([^/]+)\/sincronizar$/,events,m=>'/internal/atividades/'+m[1]+'/sincronizar','organizer'],
     ['GET', /^\/atividades\/([^/]+)$/,events,m=>'/internal/atividades/'+m[1],'public'],
     ['POST', /^\/inscricoes$/,registrations,'/internal/inscricoes','participant'],
+    ['POST', /^\/pagamentos\/([^/]+)\/simular$/,process.env.PAYMENTS_URL||'http://payments:3000',m=>'/internal/pagamentos/'+m[1]+'/simular','participant'],
+    ['GET', /^\/pagamentos\/([^/]+)$/,process.env.PAYMENTS_URL||'http://payments:3000',m=>'/internal/pagamentos/'+m[1],'authenticated'],
     ['GET', /^\/inscricoes\/([^/]+)$/,registrations,m=>'/internal/inscricoes/'+m[1],'authenticated'],
     ['POST', /^\/inscricoes\/([^/]+)\/cancelar$/,registrations,m=>'/internal/inscricoes/'+m[1]+'/cancelar','authenticated'],
   ];
@@ -92,7 +94,7 @@ function install(server){
         return reply.code(403).send({error:'CSRF_INVALIDO'});
       const route=typeof target==='function'?target(match):target;
       const body={...(request.body||{})};
-      if(method==='POST'&&path==='/inscricoes'){
+      if(method==='POST'&&(path==='/inscricoes'||/^\/pagamentos\/[^/]+\/simular$/.test(path))){
         body.idempotency_key=request.headers['idempotency-key'];
       }
       const r=await requestTo(base+route,method,body,p);
