@@ -15,7 +15,7 @@
 | Subconjunto | Evidencia | Situacao |
 |---|---|---|
 | Arquitetura e ADRs | `docs/planejamento/`, decisao de cinco servicos implementaveis e tres modelados | Documentado |
-| Git no STI e notebook | main igual ao remoto no marco `4007451` (anterior ao modulo de pagamentos integrado) | Sincronizado nesse marco |
+| Git no STI e notebook | main igual ao remoto no marco `3abed14` (pagamentos implementados, prova E2E pendente) | Sincronizado nesse marco antes do commit deste checkpoint |
 | Docker local | 9 containers: mysql, identity, events, payments, registrations, registrations-worker, notifications, gateway, caddy | Em execucao no ultimo teste |
 | MySQL 8.4/InnoDB | Volume persistente; cinco bancos e usuarios isolados | Validado localmente |
 | SQLite de Inscricoes | Emissor unico de ticket, sequencia por atividade, CPF HMAC, idempotencia | Testado em concorrencia |
@@ -95,11 +95,19 @@ Get-Content -Raw .\scripts\test_payments_e2e.js | docker compose exec -T identit
 - Relatorio Word academico: `EventHub_Trabalho_2_Referencias_Verificadas.docx` no Google Drive.
 - Documentacao de execucao anterior: `docs/EXECUCAO_LOCAL.md`.
 
-## 7. Checklist de conclusao da etapa
+## 7. Encerramento verificado de 02/11/2026
 
-- [x] Confirmar commit `4007451` no remoto.
-- [x] Validar 44 testes Python e build React/Vite no STI.
-- [x] Preparar integracao financeira simulada nos dominios separados.
-- [ ] Executar `PAYMENTS_E2E_OK` no Docker e registrar evidencias.
-- [ ] Publicar commit final da etapa e confirmar STI = GitHub = notebook.
-- [ ] Atualizar este checkpoint com hash final e status real.
+- [x] Commit `3abed14702863e5227054eca0e3502c61ee9783d` publicado no GitHub e conciliado no notebook por fast-forward, sem arquivos locais pendentes.
+- [x] 44 testes Python e 2 testes Node aprovados no STI **e no notebook** (reexecucao apos o pull).
+- [x] `docker compose config --quiet` aprovado no notebook.
+- [x] Rebuild Docker com o simulador financeiro e a interface Vite concluiu sem erro, sem remover volumes.
+- [x] Apos o rebuild, `docker compose ps -a` reportou **9 containers Up**, 7 healthchecks `healthy` e Caddy escutando somente em `127.0.0.1:8088`.
+- [ ] **SEM RESULTADO do teste financeiro E2E:** o comando `Get-Content -Raw .\\scripts\\test_payments_e2e.js | docker compose exec -T identity node -` foi enviado ao terminal, mas o NEXO do notebook ficou **offline** antes de retornar stdout/exit code. Nao afirmar `PAYMENTS_E2E_OK` ou reprovar sem log.
+- [ ] Notificacoes/Outbox, testes de degradacao, auditoria financeira, contingencia e validacao visual ainda pendentes.
+- [ ] Atualizar o hash deste proprio checkpoint depois de novo commit, sincronizar por `git pull --ff-only` no notebook quando ele voltar online.
+
+**Fonte da verdade:** GitHub `main`; nenhum force push. O commit `3abed14` e marco financeiro integrado em codigo, nao prova E2E. O checkpoint anterior dizia `4007451`; o marco mais recente e `3abed14`.
+
+**Primeira acao na proxima sessao:** verificar `git status --short --branch`, `git rev-parse HEAD` e `docker compose ps` no notebook; repetir o teste financeiro E2E; verificar erros em `docker compose logs --no-color --tail 80 payments registrations gateway`; corrigir via STI e novo commit; executar novamente testes de inscricao e pagamento. Nao apagar volumes nem regenerar segredos locais.
+
+**Nota sobre demonstracao:** os botoes de pagamento sao apenas simulados, nao processam transacoes reais. O retorno `healthy` mede disponibilidade do processo, nao a correcao das regras financeiras. Nenhuma publicacao VPS foi efetuada.
