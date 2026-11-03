@@ -83,3 +83,25 @@ dados de demonstracao. Em seguida, alerta de contingencia e roteiro final.
 - Estado pos-ensaio: MySQL e todos os demais nove containers em execucao; healthchecks disponiveis saudaveis. Arquivos locais preexistentes nao rastreados no notebook foram preservados.
 **Limite da prova:** a gravacao na indisponibilidade foi feita diretamente no `TicketStore.issue` dentro do container `registrations`; NAO comprova que a rota publica de inscricao aceite pedidos durante queda total do MySQL. A implementacao de `register()` em `services/registrations/app/main.py` consulta antes o servico Eventos, dependente de MySQL. Investigar e ensaiar o caminho real de usuario antes de declarar contingencia fim a fim aprovada; nao contornar verificacao de atividade publicada sem um contrato de validade seguro.
 **Ainda pendente:** ensaio de queda e retomada do servico Notificacoes/Outbox com retry e deduplicacao. Sua preparacao foi bloqueada por uma restricao de seguranca da ferramenta; nao houve parada do servico Notificacoes nem validacao de falha real. Manter tambem pendentes contingencia financeira apos 15 minutos, PIX manual verificado e roteiro final.
+
+## Atualizacao de ensaios isolados — 03/11/2026 (eventhub-chaos)
+
+Ambiente independente `eventhub-chaos` no notebook, porta local 18088, nove containers e volumes `eventhub-chaos_mysql_data` e `eventhub-chaos_sqlite_data`, separados do EventHub de demonstracao. Nao foram removidos volumes. E2E HTTP, pagamentos simulados, notificacoes e worker/FIFO passaram no ambiente isolado.
+
+### Falha real de Notificacoes — APROVADO para o cenario ensaiado
+- `docker compose -p eventhub-chaos stop -t 10 notifications`: servico interrompido; E2E convencional retornou 503, como esperado com o componente indisponivel.
+- Outbox durante falha: 1 evento pendente e 2 tentativas registradas.
+- `docker compose -p eventhub-chaos start notifications`: restaurado. Consulta apos recuperacao: evento `f5c2e27c-6ced-429a-873b-0a2f355733de` entregue com `attempts=3`, `delivered=1`, nenhum evento pendente; caixa do servico Notificacoes tinha exatamente 1 registro para o event_id.
+- `NOTIFICATIONS_E2E_OK` apos recuperacao; healthcheck saudavel. Isso valida retry/entrega e deduplicacao nesse caso, nao indisponibilidade prolongada nem falhas simultaneas.
+
+### Falha real MySQL e API — REPROVADO para admissao em modo degradado
+- No `eventhub-chaos`, MySQL foi parado; POST autenticado na API interna de inscricoes respondeu `503 EVENTOS_INDISPONIVEL` (teste passou porque esperava comprovar o erro). MySQL restaurado e dois ambientes voltaram a HTTP 200.
+- A validacao remota de atividade publicada em Eventos impede emitir novos tickets pela API durante indisponibilidade total de MySQL, apesar de `TicketStore.issue` funcionar isoladamente. **Bloqueador de contingencia fim a fim**; corrigir sem permitir inscricoes em atividades nao publicadas.
+
+### Concorrencia pela API real — APROVADO para 40 requisicoes / 12 vagas
+- Script versionado `scripts/test_api_concurrency_e2e.js` (commit `6fe4c15`), executado via `docker compose -p eventhub-chaos exec -T identity node -`.
+- `API_CONCURRENCY_E2E_OK activity=5a7edc68-f192-4ae6-8c60-3170f4015e97 submitted=40 capacity=12 confirmed=12 waiting=28 unique=true fifo=true idempotent=true isolation=true elapsed_ms=4441`.
+- Auditoria independente, leitura direta SQLite e MySQL: `API_CONCURRENCY_DB_AUDIT_OK sqlite={'CONFIRMADO': 12, 'EM_FILA': 28} mysql={'CONFIRMADO': 12, 'EM_FILA': 28} capacity=12 tickets_unique_sequential=true overbooking=false`, exit code 0.
+- Limite: ensaio de 40 concorrentes nao e benchmark de throughput/carga extrema; nenhum teste de falha simultanea em pico foi executado.
+
+**Proximos ensaios:** implementar/validar modo degradado pela API com cadastro autenticado de atividade publicada, testar carga maior e retries durante failover, falha entre commit MySQL e ACK SQLite em processo/container real, contingencia financeira de 15 minutos e PIX manual verificado, documentar resultados academicos.
