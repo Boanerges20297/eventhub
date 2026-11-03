@@ -1,0 +1,150 @@
+name: eventhub
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${EVENTHUB_MYSQL_ROOT_PASSWORD:?configure .env}
+      MYSQL_DATABASE: eventhub_inscricoes
+      MYSQL_USER: eventhub_registrations
+      MYSQL_PASSWORD: ${EVENTHUB_MYSQL_REGISTRATIONS_PASSWORD:?configure .env}
+      EVENTHUB_MYSQL_IDENTITY_PASSWORD: ${EVENTHUB_MYSQL_IDENTITY_PASSWORD:?configure .env}
+      EVENTHUB_MYSQL_EVENTS_PASSWORD: ${EVENTHUB_MYSQL_EVENTS_PASSWORD:?configure .env}
+      EVENTHUB_MYSQL_PAYMENTS_PASSWORD: ${EVENTHUB_MYSQL_PAYMENTS_PASSWORD:?configure .env}
+      EVENTHUB_MYSQL_NOTIFICATIONS_PASSWORD: ${EVENTHUB_MYSQL_NOTIFICATIONS_PASSWORD:?configure .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./infra/mysql/10-service-databases.sh:/docker-entrypoint-initdb.d/10-service-databases.sh:ro
+      - ./services/registrations/sql/001_initial.sql:/docker-entrypoint-initdb.d/20-registrations.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping --host=127.0.0.1 --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+    networks: [backend]
+
+  identity:
+    build: ./services/node
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: identity
+      PORT: "3000"
+      DB_HOST: mysql
+      DB_NAME: eventhub_identity
+      DB_USER: eventhub_identity
+      DB_PASSWORD: ${EVENTHUB_MYSQL_IDENTITY_PASSWORD:?configure .env}
+    depends_on:
+      mysql: {condition: service_healthy}
+    networks: [backend]
+    healthcheck: &node_health
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  events:
+    build: ./services/node
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: events
+      PORT: "3000"
+      DB_HOST: mysql
+      DB_NAME: eventhub_events
+      DB_USER: eventhub_events
+      DB_PASSWORD: ${EVENTHUB_MYSQL_EVENTS_PASSWORD:?configure .env}
+    depends_on:
+      mysql: {condition: service_healthy}
+    networks: [backend]
+    healthcheck: *node_health
+
+  payments:
+    build: ./services/node
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: payments
+      PORT: "3000"
+      DB_HOST: mysql
+      DB_NAME: eventhub_payments
+      DB_USER: eventhub_payments
+      DB_PASSWORD: ${EVENTHUB_MYSQL_PAYMENTS_PASSWORD:?configure .env}
+    depends_on:
+      mysql: {condition: service_healthy}
+    networks: [backend]
+    healthcheck: *node_health
+
+  registrations:
+    build: ./services/registrations
+    restart: unless-stopped
+    environment:
+      EVENTHUB_MYSQL_HOST: mysql
+      EVENTHUB_MYSQL_PORT: "3306"
+      EVENTHUB_MYSQL_DATABASE: eventhub_inscricoes
+      EVENTHUB_MYSQL_USER: eventhub_registrations
+      EVENTHUB_MYSQL_PASSWORD: ${EVENTHUB_MYSQL_REGISTRATIONS_PASSWORD:?configure .env}
+      EVENTHUB_CPF_HASH_KEY: ${EVENTHUB_CPF_HASH_KEY:?configure .env}
+      EVENTHUB_SQLITE_PATH: /app/data/queue.sqlite3
+    volumes:
+      - sqlite_data:/app/data
+    depends_on:
+      mysql: {condition: service_healthy}
+    networks: [backend]
+    healthcheck: &python_health
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  notifications:
+    build: ./services/notifications
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: notifications
+      EVENTHUB_MYSQL_HOST: mysql
+      EVENTHUB_MYSQL_DATABASE: eventhub_notifications
+      EVENTHUB_MYSQL_USER: eventhub_notifications
+      EVENTHUB_MYSQL_PASSWORD: ${EVENTHUB_MYSQL_NOTIFICATIONS_PASSWORD:?configure .env}
+    depends_on:
+      mysql: {condition: service_healthy}
+    networks: [backend]
+    healthcheck: *python_health
+
+  gateway:
+    build: ./services/node
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: gateway
+      PORT: "3000"
+      IDENTITY_URL: http://identity:3000
+      EVENTS_URL: http://events:3000
+      PAYMENTS_URL: http://payments:3000
+      REGISTRATIONS_URL: http://registrations:8000
+      NOTIFICATIONS_URL: http://notifications:8000
+    depends_on:
+      identity: {condition: service_healthy}
+      events: {condition: service_healthy}
+      payments: {condition: service_healthy}
+      registrations: {condition: service_healthy}
+      notifications: {condition: service_healthy}
+    networks: [backend]
+    healthcheck: *node_health
+
+  caddy:
+    build:
+      context: .
+      dockerfile: infra/caddy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      gateway: {condition: service_healthy}
+    ports:
+      - "127.0.0.1:${EVENTHUB_HTTP_PORT:-8088}:80"
+    networks: [backend, edge]
+
+networks:
+  backend:
+    internal: true
+  edge:
+
+volumes:
+  mysql_data:
+  sqlite_data:

@@ -10,10 +10,12 @@ Implementacao **iniciada e autorizada em 02/11/2026**. O primeiro modulo conclui
 
 - `docs/planejamento/`: decisoes DA-00 a DA-18, contratos, ADRs e fluxos aprovados no planejamento.
 - `services/registrations/app/ticket_store.py`: emissao transacional de tickets por atividade em SQLite com CPF normalizado, HMAC, idempotencia e unicidade de inscricoes ativas.
-- `services/registrations/app/capacity_store.py`: regras de capacidade e ingestao FIFO com bloqueio transacional InnoDB (ainda sem teste contra MySQL real).
+- `services/registrations/app/capacity_store.py`: regras de capacidade e ingestao FIFO com bloqueio transacional InnoDB (testado com MySQL real no notebook; worker automatico pendente).
 - `services/registrations/sql/001_initial.sql`: tabelas MySQL exclusivas de Inscricoes, com versao, ocupacao e unicidade ativa.
 - `services/registrations/app/mysql_connection.py`: conexao por conta de menor privilegio, sem segredos no Git.
-- `services/registrations/tests/`: 28 testes locais (11 SQLite, 14 regras/contratos de transacao e 3 verificacoes de seguranca da conexao), sem testes de integracao InnoDB.
+- `services/registrations/tests/`: 28 testes unitarios/SQLite locais (11 SQLite, 14 regras/contratos de transacao e 3 verificacoes de seguranca da conexao).
+- `scripts/test_integration.py`: teste reproduzivel no MySQL real do container (200 tickets, 30 reservas, 170 esperando, sem overbooking).
+- `compose.yaml`, `infra/`, `frontend/`, `services/node/` e `services/notifications/`: infraestrutura Docker local com cinco servicos, gateway Fastify, Caddy e MySQL isolado. Ver `docs/EXECUCAO_LOCAL.md`.
 
 ## Testes locais (STI / Python 3.14)
 

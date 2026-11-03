@@ -1,6 +1,7 @@
 -- EventHub / Inscricoes / MySQL 8.4+ (schema isolado e dedicado).
 -- Executar somente na base eventhub_inscricoes com usuario proprio. Sem CREATE DATABASE.
 -- Testar em base de desenvolvimento antes de producao.
+USE eventhub_inscricoes;
 CREATE TABLE IF NOT EXISTS activity_capacity (
   atividade_id VARCHAR(64) NOT NULL PRIMARY KEY,
   capacity INT UNSIGNED NOT NULL,

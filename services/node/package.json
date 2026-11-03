@@ -1,0 +1,16 @@
+{
+  "name": "eventhub-node-services",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bootstrap de Identity, Events, Payments e Gateway do EventHub",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "fastify": "^5.6.2"
+  }
+}
