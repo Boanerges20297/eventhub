@@ -11,7 +11,7 @@
 
 ## Outbox transacional e notificacoes simuladas
 
-Codigo preparado no STI (ainda a validar no Docker):
+Codigo desenvolvido no STI e posteriormente validado no Docker (evidencias na secao de 03/11 abaixo):
 - `services/registrations/app/outbox.py`: tabela de outbox no banco de Inscricoes, gravacao na transacao de reserva/estado, entrega at-least-once com retry/backoff e ACK.
 - `services/registrations/app/capacity_store.py`: grava evento no mesmo commit da concessao, promocao, cancelamento, pagamento e expiracao, com IDs de usuario/inscricao e estado, sem CPF ou email.
 - `services/registrations/app/worker.py`: dispatcher envia por rede interna, nunca durante lock da vaga; falha na entrega nao desfaz operacao de inscricao.
@@ -25,17 +25,45 @@ Codigo preparado no STI (ainda a validar no Docker):
 
 - 48 testes Python no STI passaram (44 anteriores + 4 do contrato Outbox).
 - Testes de compilacao Python/Node e build Vite passaram.
-- **Ate validar em Docker:** nao declarar `NOTIFICATIONS_E2E_OK`, nem email real enviado. Nao existe SMTP; notificacoes sao registros simulados no banco proprio.
+- **Atualizacao apos teste Docker:** `NOTIFICATIONS_E2E_OK` confirmado, com persistencia, confirmacao, deduplicacao e isolamento. Nao existe SMTP; notificacoes sao registros simulados no banco proprio.
 - O contrato de Outbox usa entrega at-least-once e deduplicacao, nao exatamente-once distribuido.
 - Nenhum dado real ou credencial incluidos no checkpoint.
 
-## Prioridade imediata para continuar
+## Roteiro de validacao executado em 03/11 (historico)
 
 1. Commit/push pelo STI e `git pull --ff-only` no notebook apos confirmar `git status` limpo.
 2. `docker compose up -d --build registrations registrations-worker notifications gateway caddy` no notebook, preservando volumes.
 3. Executar `Get-Content -Raw .\\scripts\\test_notifications_e2e.js | docker compose exec -T identity node -`; observar `NOTIFICATIONS_E2E_OK`.
 4. Reexecutar `test_http_e2e.js`, `test_payments_e2e.js`, testes Python e inspecionar logs de worker.
 5. Atualizar checkpoint com hash final e evidencia real antes de iniciar testes de contingencia (MySQL offline e conciliacao FIFO).
+
+## Validacao integrada apos rebuild — 03/11/2026
+
+**Commit implementado:** `dd88b069ce97e35e46647cc5225e788e35f3cd56`.
+Apos autorizacao explicita, executado no notebook:
+`docker compose up -d --build registrations registrations-worker notifications gateway caddy`.
+Nenhum volume foi removido.
+
+Resultados observados no terminal Docker do notebook:
+
+- `NOTIFICATIONS_E2E_OK activity=8140a7b6-3132-454e-b9e7-4a1c2ca9a672 persisted=true reserved=true confirmed=true dedupe=true isolation=true`
+- `HTTP_E2E_OK event=cace47fb-16a6-4917-8ddf-02e67bbd1098 activity=4411d4e8-b888-442a-a65f-38a274227e78 auth=true csrf=true rbac=true idempotency=true ownership=true fifo=true promotion=true`
+- `PAYMENTS_E2E_OK activity=5176533c-09b6-4bf4-a4b6-0d871465f37f approved=true refusal_promotes_fifo=true indeterminate_holds_seat=true idempotency=true ownership=true`
+
+Antes da publicacao, `48` testes Python passaram e o frontend Vite compilou.
+Apos o pull no notebook, `48` testes Python tambem passaram. Esses resultados
+confirmam o fluxo funcional com eventos sinteticos e os contratos de seguranca
+verificados pelos scripts. Nao comprovam resistencia a falhas fisicas ou carga
+extrema.
+
+**Status atualizado:** Outbox transacional e notificacoes SIMULADAS
+**implementadas e validadas no E2E local**. Nenhum SMTP real ou provedor de
+pagamento real esta habilitado.
+
+**Proxima etapa, ainda PENDENTE:** ensaio controlado de queda do MySQL e do
+servico Notificacoes, persistencia SQLite, retry da Outbox, retomada FIFO e
+ausencia de overbooking. Fazer sem `docker compose down -v` e preservar os
+dados de demonstracao. Em seguida, alerta de contingencia e roteiro final.
 
 ## Pendencias posteriores ate 06/11
 
