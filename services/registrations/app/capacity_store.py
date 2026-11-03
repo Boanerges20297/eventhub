@@ -179,6 +179,135 @@ class CapacityStore:
                 operation_id, result, current_version, current_capacity, reason
             )
 
+    def get_status(self, inscricao_id: str) -> str | None:
+        """Consulta de reconciliacao; nao altera nenhum recurso."""
+        with self._transaction() as cursor:
+            cursor.execute(
+                "SELECT status FROM registrations WHERE inscricao_id=%s",
+                (inscricao_id,),
+            )
+            row = cursor.fetchone()
+            return row["status"] if row else None
+
+    @staticmethod
+    def _promote_locked(cursor: Any, settings: dict) -> list[GrantResult]:
+        """Exige lock na linha da atividade. Todos os participantes usam mesmo lock."""
+        activity = settings["atividade_id"]
+        free = int(settings["capacity"]) - CapacityStore._occupancy(cursor, activity)
+        if free < 0:
+            raise CapacityError("OCUPACAO_INCONSISTENTE")
+        promoted = []
+        for _ in range(min(free, 1000)):
+            cursor.execute(
+                """SELECT inscricao_id,numero_ticket FROM registrations
+                   WHERE atividade_id=%s AND status='EM_FILA'
+                   ORDER BY numero_ticket LIMIT 1 FOR UPDATE""",
+                (activity,),
+            )
+            first = cursor.fetchone()
+            if not first:
+                break
+            paid = bool(settings["atividade_paga"])
+            status = "RESERVADO" if paid else "CONFIRMADO"
+            cursor.execute(
+                """UPDATE registrations SET status=%s, granted_at=UTC_TIMESTAMP(6),
+                   reserva_expira_em=CASE WHEN %s THEN DATE_ADD(UTC_TIMESTAMP(6),
+                   INTERVAL %s MINUTE) ELSE NULL END
+                   WHERE inscricao_id=%s AND status='EM_FILA'""",
+                (status, paid, int(settings["prazo_reserva_min"]), first["inscricao_id"]),
+            )
+            if cursor.rowcount != 1:
+                raise CapacityError("FILA_ALTERADA")
+            promoted.append(GrantResult(
+                first["inscricao_id"], activity, int(first["numero_ticket"]), status
+            ))
+        return promoted
+
+    def promote_waiting(self, activity: str) -> list[GrantResult]:
+        """Repara vagas abertas e promove exclusivamente pela ordem FIFO."""
+        with self._transaction() as cursor:
+            settings = self._capacity_row(cursor, activity)
+            if not settings:
+                raise CapacityError("ATIVIDADE_NAO_SINCRONIZADA")
+            return self._promote_locked(cursor, settings)
+
+    def finalize(self, inscricao_id: str, *, expected: str, destination: str
+                 ) -> tuple[bool, list[GrantResult]]:
+        """Transicao definitiva e liberacao atomica da vaga, seguida de FIFO.
+
+        A confirmacao de resultado de pagamento so pode chamar isto apos
+        autenticacao/autorizacao interna. Nao expor diretamente por HTTP.
+        """
+        transitions = {
+            "RESERVADO": {"CANCELADO", "RECUSADO", "EXPIRADO"},
+            "CONFIRMADO": {"CANCELADO"},
+            "EM_FILA": {"CANCELADO"},
+        }
+        if destination not in transitions.get(expected, set()):
+            raise CapacityError("FINALIZACAO_INVALIDA")
+        # Resolver a atividade em uma transacao de leitura separada evita
+        # criar um snapshot REPEATABLE READ antes do lock de capacidade.
+        # A transacao decisoria comeca travando activity_capacity.
+        with self._transaction() as cursor:
+            cursor.execute(
+                "SELECT atividade_id FROM registrations WHERE inscricao_id=%s",
+                (inscricao_id,),
+            )
+            found = cursor.fetchone()
+            if not found:
+                raise CapacityError("INSCRICAO_INEXISTENTE")
+            activity = found["atividade_id"]
+        with self._transaction() as cursor:
+            settings = self._capacity_row(cursor, activity)
+            if not settings:
+                raise CapacityError("ATIVIDADE_NAO_SINCRONIZADA")
+            cursor.execute(
+                "SELECT status, reserva_expira_em FROM registrations "
+                "WHERE inscricao_id=%s FOR UPDATE", (inscricao_id,),
+            )
+            state = cursor.fetchone()
+            if state["status"] == destination:
+                return False, []
+            if state["status"] != expected:
+                raise CapacityError("ESTADO_DESATUALIZADO")
+            if destination == "EXPIRADO":
+                cursor.execute(
+                    """UPDATE registrations SET status=%s
+                       WHERE inscricao_id=%s AND status='RESERVADO'
+                       AND reserva_expira_em IS NOT NULL
+                       AND reserva_expira_em <= UTC_TIMESTAMP(6)""",
+                    (destination, inscricao_id),
+                )
+                if cursor.rowcount != 1:
+                    raise CapacityError("PRAZO_NAO_EXPIRADO")
+            else:
+                cursor.execute(
+                    "UPDATE registrations SET status=%s WHERE inscricao_id=%s",
+                    (destination, inscricao_id),
+                )
+            return True, self._promote_locked(cursor, settings)
+
+    def waiting_activities(self, limit: int = 100) -> list[str]:
+        """Candidatas a promocao quando uma vaga for liberada ou capacidade subir."""
+        with self._transaction() as cursor:
+            cursor.execute(
+                """SELECT DISTINCT atividade_id FROM registrations
+                   WHERE status='EM_FILA' LIMIT %s""",
+                (limit,),
+            )
+            return [row["atividade_id"] for row in cursor.fetchall()]
+
+    def due_expirations(self, limit: int = 50) -> list[str]:
+        """Identifica candidatos. finalize revalida prazo sob lock de atividade."""
+        with self._transaction() as cursor:
+            cursor.execute(
+                """SELECT inscricao_id FROM registrations
+                   WHERE status='RESERVADO' AND reserva_expira_em<=UTC_TIMESTAMP(6)
+                   ORDER BY reserva_expira_em LIMIT %s""",
+                (limit,),
+            )
+            return [row["inscricao_id"] for row in cursor.fetchall()]
+
     def admit_ticket(self, *, inscricao_id: str, user_id: str,
                      activity: str, numero_ticket: int, cpf_digest: str) -> GrantResult:
         """Importa ticket duravel do SQLite em ordem e concede somente se elegivel.

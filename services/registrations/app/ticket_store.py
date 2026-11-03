@@ -190,6 +190,69 @@ class TicketStore:
             ).fetchall()
             return [self._ticket(row) for row in rows]
 
+    def pending_ingestion(self, limit: int = 200) -> list[dict]:
+        """Pedidos ainda nao confirmados localmente; inclui hash, nunca CPF em claro."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT inscricao_id, user_id, atividade_id, numero_ticket, cpf_digest
+                   FROM ticket_requests WHERE status='REGISTRADO'
+                   ORDER BY atividade_id, numero_ticket LIMIT ?""",
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def reconciliation_candidates(self, limit: int = 500) -> list[Ticket]:
+        """Estados ativos para restaurar ACK perdido do MySQL."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT * FROM ticket_requests
+                   WHERE status IN ('REGISTRADO','EM_FILA','RESERVADO',
+                                    'EM_VERIFICACAO','CONFIRMADO')
+                   ORDER BY updated_at ASC, atividade_id, numero_ticket LIMIT ?""",
+                (limit,),
+            ).fetchall()
+            return [self._ticket(row) for row in rows]
+
+    def sync_authoritative(self, inscricao_id: str, destination: str) -> Ticket:
+        """Concilia salto de estados apos commit MySQL e ACK SQLite perdido.
+
+        O MySQL deve ser consultado por ID antes desta chamada; esta nao e API publica.
+        Aceita apenas caminho valido no grafo, nunca regressao de estado.
+        """
+        if destination not in ACTIVE | TERMINAL:
+            raise TicketError("ESTADO_INVALIDO")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = connection.execute(
+                    "SELECT * FROM ticket_requests WHERE inscricao_id=?", (inscricao_id,)
+                ).fetchone()
+                if not row:
+                    raise TicketError("TICKET_INEXISTENTE")
+                state = row["status"]
+                if state != destination:
+                    reached, frontier = {state}, [state]
+                    while frontier:
+                        current = frontier.pop()
+                        for future in TRANSITIONS.get(current, ()):
+                            if future not in reached:
+                                reached.add(future)
+                                frontier.append(future)
+                    if destination not in reached:
+                        raise TicketError("REGRESSAO_DE_ESTADO")
+                    connection.execute(
+                        """UPDATE ticket_requests SET status=?,
+                           updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                           WHERE inscricao_id=?""",
+                        (destination, inscricao_id),
+                    )
+                connection.execute("COMMIT")
+                return Ticket(row["inscricao_id"], row["atividade_id"],
+                              row["numero_ticket"], destination)
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
     def update_from_worker(self, inscricao_id: str, expected: str, destination: str) -> Ticket:
         """Uso EXCLUSIVO do worker apos validar a transicao no MySQL; nao e endpoint publico."""
         if destination not in TRANSITIONS.get(expected, frozenset()):
