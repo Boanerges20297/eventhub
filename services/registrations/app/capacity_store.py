@@ -61,11 +61,22 @@ def evaluate_capacity(*, desired: int, committed: int) -> str | None:
 class CapacityStore:
     """Recebe fabrica de conexoes DB-API MySQL com DictCursor e autocommit=False."""
 
-    def __init__(self, connect: Callable[[], Any]):
+    def __init__(self, connect: Callable[[], Any], *, enable_outbox: bool = False):
         self.connect = connect
+        self.outbox = None
+        if enable_outbox:
+            from .outbox import RegistrationOutbox
+            self.outbox = RegistrationOutbox(connect)
+
+    def _emit_locked(self, cursor: Any, *, inscricao_id: str, user_id: str, status: str):
+        if self.outbox is not None:
+            self.outbox.append_locked(cursor, inscricao_id=inscricao_id,
+                                      user_id=user_id, status=status)
 
     @contextmanager
     def _transaction(self) -> Iterator[Any]:
+        if self.outbox is not None:
+            self.outbox.ensure_schema()
         connection = self.connect()
         try:
             cursor = connection.cursor()
@@ -190,17 +201,16 @@ class CapacityStore:
             row = cursor.fetchone()
             return row["status"] if row else None
 
-    @staticmethod
-    def _promote_locked(cursor: Any, settings: dict) -> list[GrantResult]:
+    def _promote_locked(self, cursor: Any, settings: dict) -> list[GrantResult]:
         """Exige lock na linha da atividade. Todos os participantes usam mesmo lock."""
         activity = settings["atividade_id"]
-        free = int(settings["capacity"]) - CapacityStore._occupancy(cursor, activity)
+        free = int(settings["capacity"]) - self._occupancy(cursor, activity)
         if free < 0:
             raise CapacityError("OCUPACAO_INCONSISTENTE")
         promoted = []
         for _ in range(min(free, 1000)):
             cursor.execute(
-                """SELECT inscricao_id,numero_ticket FROM registrations
+                """SELECT inscricao_id,numero_ticket,user_id FROM registrations
                    WHERE atividade_id=%s AND status='EM_FILA'
                    ORDER BY numero_ticket LIMIT 1 FOR UPDATE""",
                 (activity,),
@@ -219,6 +229,8 @@ class CapacityStore:
             )
             if cursor.rowcount != 1:
                 raise CapacityError("FILA_ALTERADA")
+            self._emit_locked(cursor, inscricao_id=first["inscricao_id"],
+                              user_id=first["user_id"],status=status)
             promoted.append(GrantResult(
                 first["inscricao_id"], activity, int(first["numero_ticket"]), status
             ))
@@ -263,7 +275,7 @@ class CapacityStore:
             if not settings:
                 raise CapacityError("ATIVIDADE_NAO_SINCRONIZADA")
             cursor.execute(
-                "SELECT status, reserva_expira_em FROM registrations "
+                "SELECT status, reserva_expira_em,user_id FROM registrations "
                 "WHERE inscricao_id=%s FOR UPDATE", (inscricao_id,),
             )
             state = cursor.fetchone()
@@ -286,6 +298,8 @@ class CapacityStore:
                     "UPDATE registrations SET status=%s WHERE inscricao_id=%s",
                     (destination, inscricao_id),
                 )
+            self._emit_locked(cursor,inscricao_id=inscricao_id,
+                              user_id=state["user_id"],status=destination)
             return True, self._promote_locked(cursor, settings)
 
     def payment_context(self, inscricao_id: str, user_id: str) -> dict | None:
@@ -330,7 +344,7 @@ class CapacityStore:
             if not self._capacity_row(cursor, activity):
                 raise CapacityError("ATIVIDADE_NAO_SINCRONIZADA")
             cursor.execute(
-                """SELECT r.status,r.reserva_expira_em,a.atividade_paga
+                """SELECT r.status,r.reserva_expira_em,r.user_id,a.atividade_paga
                    FROM registrations r JOIN activity_capacity a
                    ON a.atividade_id=r.atividade_id
                    WHERE r.inscricao_id=%s FOR UPDATE""", (inscricao_id,),
@@ -350,6 +364,8 @@ class CapacityStore:
             )
             if cursor.rowcount != 1:
                 raise CapacityError("RESERVA_EXPIRADA")
+            self._emit_locked(cursor,inscricao_id=inscricao_id,
+                              user_id=state["user_id"],status="EM_VERIFICACAO")
             return "EM_VERIFICACAO"
 
     def _ensure_payment_ledger(self) -> None:
@@ -415,7 +431,7 @@ class CapacityStore:
                     raise CapacityError("EVENTO_REUTILIZADO_COM_DADOS_DIFERENTES")
                 return prior["registration_status"], False
             cursor.execute(
-                """SELECT status,reserva_expira_em FROM registrations
+                """SELECT status,reserva_expira_em,user_id FROM registrations
                    WHERE inscricao_id=%s FOR UPDATE""", (inscricao_id,),
             )
             current = cursor.fetchone()
@@ -438,6 +454,8 @@ class CapacityStore:
                     "UPDATE registrations SET status=%s WHERE inscricao_id=%s",
                     (target, inscricao_id),
                 )
+                self._emit_locked(cursor,inscricao_id=inscricao_id,
+                                  user_id=current["user_id"],status=target)
             cursor.execute(
                 """INSERT INTO payment_events
                    (event_id,attempt_id,inscricao_id,outcome,paid_at,registration_status)
@@ -533,4 +551,6 @@ class CapacityStore:
                 "UPDATE activity_capacity SET last_ingested_ticket=%s WHERE atividade_id=%s",
                 (numero_ticket, activity)
             )
+            self._emit_locked(cursor,inscricao_id=inscricao_id,
+                              user_id=user_id,status=status)
             return GrantResult(inscricao_id, activity, numero_ticket, status)

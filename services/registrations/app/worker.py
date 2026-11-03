@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import httpx
 from dataclasses import dataclass
 
 from .capacity_store import CapacityError, CapacityStore
@@ -77,7 +78,35 @@ class RegistrationWorker:
         for activity in self.capacity.waiting_activities(limit=100):
             promoted += len(self.capacity.promote_waiting(activity))
         # O proximo ciclo reconcilia os estados promovidos/expirados no SQLite.
+        self.deliver_notifications()
         return CycleResult(ingested, reconciled, expired, promoted)
+
+    def deliver_notifications(self) -> None:
+        """Entrega at-least-once, sem conexao HTTP durante transacao de vagas."""
+        outbox = getattr(self.capacity, "outbox", None)
+        if outbox is None:
+            return
+        secret = os.environ.get("EVENTHUB_INTERNAL_SECRET", "")
+        if len(secret) < 48:
+            LOG.error("notificacao pendente: segredo interno ausente")
+            return
+        endpoint = os.environ.get(
+            "EVENTHUB_NOTIFICATIONS_URL", "http://notifications:8000"
+        ).rstrip("/") + "/internal/entregar"
+        for event in outbox.pending(limit=40):
+            try:
+                response = httpx.post(
+                    endpoint, json=event,
+                    headers={"x-eventhub-internal-key": secret},
+                    timeout=4.0,
+                )
+                if response.status_code != 200:
+                    outbox.retry_later(event["event_id"],
+                                       f"HTTP_{response.status_code}")
+                    continue
+                outbox.acknowledge(event["event_id"])
+            except httpx.HTTPError:
+                outbox.retry_later(event["event_id"], "REDE_INDISPONIVEL")
 
 
 def main() -> None:
@@ -89,7 +118,7 @@ def main() -> None:
         os.environ["EVENTHUB_SQLITE_PATH"],
         os.environ["EVENTHUB_CPF_HASH_KEY"],
     )
-    service = RegistrationWorker(queue, CapacityStore(connect_mysql))
+    service = RegistrationWorker(queue, CapacityStore(connect_mysql, enable_outbox=True))
     interval = max(1.0, float(os.getenv("EVENTHUB_WORKER_INTERVAL_SECONDS", "2")))
     LOG.info("worker iniciado; fila persistente ativa")
     while True:

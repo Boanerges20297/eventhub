@@ -34,8 +34,11 @@ def queue() -> TicketStore:
     return _queue
 
 
+_capacity = CapacityStore(connect_mysql, enable_outbox=True)
+
+
 def capacity() -> CapacityStore:
-    return CapacityStore(connect_mysql)
+    return _capacity
 
 
 def caller(request: Request) -> dict | None:
@@ -147,8 +150,8 @@ async def register(data: Register, request: Request):
         "atividade_id":ticket.atividade_id,
         "estado":ticket.status,
         "mensagem":("Sua solicitacao de vaga foi registrada. "
-                    "Assim que processarmos sua inscricao, "
-                    "voce recebera um e-mail com o resultado."),
+                    "O resultado sera atualizado no painel de tickets "
+                    "e nas notificacoes simuladas da sua conta."),
     }
 
 

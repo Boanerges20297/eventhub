@@ -18,6 +18,7 @@ function App(){
   const [cpf,setCpf]=useState('');
   const [selected,setSelected]=useState('');
   const [myTickets,setMyTickets]=useState([]);
+  const [notifications,setNotifications]=useState([]);
 
   async function api(path,method='GET',body,idem){
     const headers={};
@@ -101,6 +102,12 @@ function App(){
       setMyTickets(old=>old.map(item=>item.inscricao_id===id?{...item,...data}:item));
     }catch(e){setMessage(e.message);}
   }
+  async function loadNotifications(){
+    try{
+      const data=await api('/notificacoes');
+      setNotifications(data.notificacoes||[]);
+    }catch(e){setMessage(e.message);}
+  }
   async function simulatePayment(id, outcome){
     try{
       const result=await api('/pagamentos/'+id+'/simular',
@@ -178,7 +185,16 @@ function App(){
           </span>}
         </p>)}
       </section>}
-      <p style={{color:'#718593',fontSize:13,marginTop:24}}>Interface de teste funcional. Pagamentos sao simulados, sem cobranca real. Notificacoes e contingencia permanecem em desenvolvimento.</p>
+      {user&&<section style={{...box,marginTop:18}}>
+        <h2>Minhas notificacoes</h2>
+        <p>Eventos persistidos e entregues em modo simulacao, sem envio de e-mail.</p>
+        <button style={button} onClick={loadNotifications}>Atualizar notificacoes</button>
+        {!notifications.length&&<p>Nenhuma notificacao carregada.</p>}
+        {notifications.map(n=><p key={n.event_id} style={{borderTop:'1px solid #ddd',paddingTop:8}}>
+          Inscricao {n.inscricao_id.slice(0,8)} • <strong>{n.estado_inscricao}</strong> • {n.entrega}
+        </p>)}
+      </section>}
+      <p style={{color:'#718593',fontSize:13,marginTop:24}}>Interface de teste funcional. Pagamentos e notificacoes simulados, sem operacoes financeiras ou e-mails reais. Contingencia permanece em desenvolvimento.</p>
     </div>
   </main>;
 }

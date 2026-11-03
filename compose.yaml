@@ -117,6 +117,8 @@ services:
       EVENTHUB_CPF_HASH_KEY: ${EVENTHUB_CPF_HASH_KEY:?configure .env}
       EVENTHUB_SQLITE_PATH: /app/data/queue.sqlite3
       EVENTHUB_WORKER_INTERVAL_SECONDS: "2"
+      EVENTHUB_INTERNAL_SECRET: ${EVENTHUB_INTERNAL_SECRET:?configure .env}
+      EVENTHUB_NOTIFICATIONS_URL: http://notifications:8000
     volumes:
       - sqlite_data:/app/data
     depends_on:
@@ -128,6 +130,7 @@ services:
     restart: unless-stopped
     environment:
       SERVICE_NAME: notifications
+      EVENTHUB_INTERNAL_SECRET: ${EVENTHUB_INTERNAL_SECRET:?configure .env}
       EVENTHUB_MYSQL_HOST: mysql
       EVENTHUB_MYSQL_DATABASE: eventhub_notifications
       EVENTHUB_MYSQL_USER: eventhub_notifications

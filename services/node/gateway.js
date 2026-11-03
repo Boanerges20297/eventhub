@@ -44,6 +44,7 @@ function install(server){
     ['POST', /^\/pagamentos\/([^/]+)\/simular$/,process.env.PAYMENTS_URL||'http://payments:3000',m=>'/internal/pagamentos/'+m[1]+'/simular','participant'],
     ['GET', /^\/pagamentos\/([^/]+)$/,process.env.PAYMENTS_URL||'http://payments:3000',m=>'/internal/pagamentos/'+m[1],'authenticated'],
     ['GET', /^\/inscricoes\/([^/]+)$/,registrations,m=>'/internal/inscricoes/'+m[1],'authenticated'],
+    ['GET', /^\/notificacoes$/,process.env.NOTIFICATIONS_URL||'http://notifications:8000','/internal/notificacoes','authenticated'],
     ['POST', /^\/inscricoes\/([^/]+)\/cancelar$/,registrations,m=>'/internal/inscricoes/'+m[1]+'/cancelar','authenticated'],
   ];
   // Entrypoint reachability is local-only in development; CSRF applies to all browser writes.
