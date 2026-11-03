@@ -30,6 +30,9 @@ services:
     environment:
       SERVICE_NAME: identity
       PORT: "3000"
+      EVENTHUB_INTERNAL_SECRET: ${EVENTHUB_INTERNAL_SECRET:?configure .env}
+      EVENTHUB_BOOTSTRAP_EMAIL: ${EVENTHUB_BOOTSTRAP_EMAIL:?configure .env}
+      EVENTHUB_BOOTSTRAP_PASSWORD: ${EVENTHUB_BOOTSTRAP_PASSWORD:?configure .env}
       DB_HOST: mysql
       DB_NAME: eventhub_identity
       DB_USER: eventhub_identity
@@ -49,6 +52,8 @@ services:
     environment:
       SERVICE_NAME: events
       PORT: "3000"
+      EVENTHUB_INTERNAL_SECRET: ${EVENTHUB_INTERNAL_SECRET:?configure .env}
+      REGISTRATIONS_URL: http://registrations:8000
       DB_HOST: mysql
       DB_NAME: eventhub_events
       DB_USER: eventhub_events
@@ -83,6 +88,8 @@ services:
       EVENTHUB_MYSQL_USER: eventhub_registrations
       EVENTHUB_MYSQL_PASSWORD: ${EVENTHUB_MYSQL_REGISTRATIONS_PASSWORD:?configure .env}
       EVENTHUB_CPF_HASH_KEY: ${EVENTHUB_CPF_HASH_KEY:?configure .env}
+      EVENTHUB_INTERNAL_SECRET: ${EVENTHUB_INTERNAL_SECRET:?configure .env}
+      EVENTHUB_EVENTS_URL: http://events:3000
       EVENTHUB_SQLITE_PATH: /app/data/queue.sqlite3
     volumes:
       - sqlite_data:/app/data
@@ -134,6 +141,9 @@ services:
     environment:
       SERVICE_NAME: gateway
       PORT: "3000"
+      EVENTHUB_INTERNAL_SECRET: ${EVENTHUB_INTERNAL_SECRET:?configure .env}
+      EVENTHUB_JWT_SECRET: ${EVENTHUB_JWT_SECRET:?configure .env}
+      EVENTHUB_COOKIE_SECURE: "false"
       IDENTITY_URL: http://identity:3000
       EVENTS_URL: http://events:3000
       PAYMENTS_URL: http://payments:3000

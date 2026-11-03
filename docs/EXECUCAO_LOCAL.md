@@ -86,3 +86,27 @@ O teste cria dados sinteticos no MySQL e no SQLite persistentes do EventHub, sem
 
 Promocao FIFO apos liberacao de vaga, garantia de prioridade com worker automatico, concorrencia de concessoes pelo mesmo recurso, queda entre commit MySQL e ACK SQLite, expiracao e recusa, callback atrasado, notificacoes, autorizacao real JWT/CSRF e testes de contingencia. Nao confundir evidencia de infraestrutura com MVP integrado.
 Documentar resultados adicionais no relatorio academico somente depois de executados.
+
+## Evidencia do worker (02/11/2026)
+
+O nono container registrations-worker foi inicializado e a prova real MySQL/SQLite
+retornou WORKER_INTEGRATION_OK: duas vagas, quatro pedidos, recusa promovendo
+ticket 3, cancelamento promovendo ticket 4, expiracao promovendo ticket 5,
+reconciliacao e ausencia de overbooking.
+
+## API autenticada em construcao
+
+O codigo de JWT/Argon2id, Gateway com Origin/CSRF/RBAC e API HTTP de eventos
+e inscricoes foi preparado. Sua integracao no Docker ainda NAO foi validada.
+Apos atualizar o codigo e reconstruir os servicos identity, events, gateway
+e registrations, executar o arquivo scripts/test_http_e2e.js dentro do
+container identity com: Get-Content -Raw .\scripts\test_http_e2e.js |
+docker compose exec -T identity node -
+
+O teste utiliza apenas as credenciais de demonstracao presentes nas
+variaveis privadas do container; nao exporta segredos. Usa contas sinteticas.
+A configuracao do cookie desativa Secure apenas no loopback HTTP local;
+na exposicao HTTPS deve voltar a Secure=true.
+
+Pendencias: pagamentos simulados, notificacoes/outbox, contingencia,
+validacao final do navegador e evidencia do teste HTTP.
