@@ -105,3 +105,17 @@ Ambiente independente `eventhub-chaos` no notebook, porta local 18088, nove cont
 - Limite: ensaio de 40 concorrentes nao e benchmark de throughput/carga extrema; nenhum teste de falha simultanea em pico foi executado.
 
 **Proximos ensaios:** implementar/validar modo degradado pela API com cadastro autenticado de atividade publicada, testar carga maior e retries durante failover, falha entre commit MySQL e ACK SQLite em processo/container real, contingencia financeira de 15 minutos e PIX manual verificado, documentar resultados academicos.
+
+## Correcao e prova fim a fim da contingencia pela API — 03/11/2026
+
+- Correcao canonica publicada: commit `3b46c57` em `main`, sincronizado do STI para o notebook via `git pull --ff-only`. O EventHub principal nao foi reconstruido; apenas `events`, `registrations` e `registrations-worker` do ambiente isolado `eventhub-chaos`.
+- Publicacao confirmada em Eventos e espelhada no SQLite, nao derivada unicamente de capacidade. Cache de publicacoes conhecido expira em no maximo 24h; resposta explicita 404/410 remove o espelho. Quando o MySQL/Eventos nao responde, a API permite apenas emissao local de ticket para atividade validada anteriormente, sem conceder vaga.
+- Novos testes de cache: `13 tests OK` executados dentro de `eventhub-chaos-registrations`, com dependencias FastAPI presentes. Regressao isolada: `HTTP_E2E_OK`, `PAYMENTS_E2E_OK` e `NOTIFICATIONS_E2E_OK`.
+- Ensaio E2E com tres usuarios e atividade publicada `bfffb1dd-7ffd-4038-940d-1e49e95f246f`, capacidade 2. Cache verificado no SQLite antes da interrupcao: uma linha, versao 1.
+- MySQL isolado parado via NEXO, executando fase `during` pelo Gateway. Saida: `DEGRADED_E2E_DURING_OK submitted=3 locally_registered=3 unknown_rejected=true fifo=true`, exit code 0. Uma atividade desconhecida foi rejeitada, sem ticket. Os dados de autenticacao da fase foram mantidos apenas em variavel de sessao, nao no repositorio.
+- O bloco `finally` do comando original restaurou o MySQL com `MYSQL_RESTART_EXIT=0`. Houve bloqueio temporario de leitura pelo NEXO; em terminal novo, `nexo control on` habilitou o controle, e a verificacao confirmou ambos MySQL (principal e isolado) `healthy`.
+- Fase `after`: `DEGRADED_E2E_RECOVERY_OK confirmed=2 waiting=1 fifo=true overbooking=false`, exit 0.
+- Auditoria independente dos bancos: `DEGRADED_DB_AUDIT_OK sqlite=[(1,'CONFIRMADO'),(2,'CONFIRMADO'),(3,'EM_FILA')] mysql=[(1,'CONFIRMADO'),(2,'CONFIRMADO'),(3,'EM_FILA')] capacity=2 fifo=true overbooking=false`, exit 0.
+- Estado final: ambos ambientes com nove containers em execucao; endpoints locais `http://127.0.0.1:18088/api/health` e `http://127.0.0.1:8088/api/health` HTTP 200. Nao houve `down -v` nem remocao de volumes.
+
+**Conclusao limitada:** modo degradado pela API, com publicacao previamente validada, e conciliacao FIFO apos falha real MySQL foram APROVADOS no cenario de tres usuarios. Permanecem sem prova: carga intensa durante falha, revogacao concorrente ao cache (janela de ate 24h), crash real entre commit MySQL e ACK SQLite, failover combinado e contingencia financeira/PIX manual. Nao declarar disponibilidade irrestrita nem garantia distribuida de exatamente-uma-vez.
