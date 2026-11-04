@@ -27,6 +27,8 @@ O EventHub é um **produto real em evolução**, não uma página descartável a
 
 Essas telas existem no React; **não presumir que integrações reais foram reexecutadas** após os novos ajustes apenas porque o mock respondeu.
 
+**Documentação de rede e segurança:** a matriz de comunicação, limites de confiança e riscos de produção estão consolidados em [Arquitetura de Comunicação e Segurança de Rede](ARQUITETURA_COMUNICACAO_SEGURANCA_REDE.md). A integração no notebook continua explicitamente reservada para a etapa final.
+
 ## Contrato único de integração
 
 `frontend/src/api.js` é a fachada HTTP do React, com `requestApi()` e mapa `routes`. Endereços de containers, portas, IPs de notebook ou bancos **não são codificados no frontend**. Requisições usam a mesma origem `/api` do gateway, `credentials:'same-origin'`, token CSRF recebido com a sessão em operações de escrita e `Idempotency-Key` nas operações que o exigem.

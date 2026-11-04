@@ -1,48 +1,47 @@
 # EventHub
 
-Trabalho 2 da disciplina **Arquitetura de Software** (Mestrado UECE), entrega prevista para 06/11/2026.
+Plataforma de eventos em evolução como **produto real**, originalmente desenvolvida no Trabalho 2 de Arquitetura de Software (Mestrado UECE, entrega acadêmica em **06/11/2026**).
 
-## Estado atual
+**Fonte canônica:** repositório privado `Boanerges20297/eventhub`, branch `main`. Desenvolvimento no STI01 por NEXO; **notebook e containers locais somente na etapa final autorizada**, após refinamento das telas, contratos e documentação. Não iniciar publicação pública implícita.
 
-Cinco microsservicos executam publicacao, inscricao, FIFO, pagamentos simulados e Outbox/notificacoes. O ensaio de 03/11 com 200 pedidos durante queda real de MySQL (30 vagas) validou conciliacao sem overbooking no Docker isolado. Em 04/11 iniciamos a evolucao para uma plataforma: historico persistente das inscricoes e cancelamento pela interface foram implementados no STI, com testes locais aprovados; a prova HTTP no notebook esta pendente. **Pagamentos reais e deploy publico nao estao prontos.**
+## Situação em 04/11/2026
 
-**Checkpoint atual:** [docs/CHECKPOINT_2026-11-04.md](docs/CHECKPOINT_2026-11-04.md). Evidencias dos ensaios: [03/11](docs/CHECKPOINT_2026-11-03.md).
+- **Cinco microsserviços implementados:** Identidade, Eventos, Inscrições, Pagamentos **simulados** e Notificações **simuladas**, combinando Node/Fastify e Python/FastAPI.
+- **Infraestrutura definida:** Caddy como única entrada HTTP em `127.0.0.1:8088` no Compose local, Gateway Fastify, MySQL/InnoDB (um servidor, contas/schemas por serviço), SQLite persistente de tickets e worker FIFO.
+- **Provas Docker anteriores (03/11):** fluxo HTTP autenticado, pagamentos/notificações simulados, falha recuperável e 200 requisições durante indisponibilidade real de MySQL para 30 vagas: **30 confirmados, 170 em fila, sem overbooking** no cenário isolado; consultar evidências e limites no checkpoint de 03/11.
+- **Novas telas React (04/11):** navegação superior desktop e drawer mobile, catálogo com busca, organizador, inscrições e notificações; build e interações testados no Edge em larguras 320/390/700/701/1440 px.
+- **Testes locais 04/11:** 69 testes Python executados (10 ignorados, sem falhas), 2 testes Node aprovados, build React aprovado. **Novos endpoints/frontend ainda precisam de E2E Docker final.**
+- **Ainda não disponíveis:** pagamentos reais, SMTP real, Check-in, Certificados, Relatórios e implantação pública. Não confundir atividade simulada com transação financeira.
 
-## Estrutura
+## Documentos principais
 
-- `docs/planejamento/`: decisoes DA-00 a DA-18, contratos, ADRs e fluxos aprovados no planejamento.
-- `services/registrations/app/ticket_store.py`: emissao transacional de tickets por atividade em SQLite com CPF normalizado, HMAC, idempotencia e unicidade de inscricoes ativas.
-- `services/registrations/app/capacity_store.py`: regras de capacidade e ingestao FIFO com bloqueio transacional InnoDB (testado com MySQL real no notebook; worker automatico pendente).
-- `services/registrations/sql/001_initial.sql`: tabelas MySQL exclusivas de Inscricoes, com versao, ocupacao e unicidade ativa.
-- `services/registrations/app/mysql_connection.py`: conexao por conta de menor privilegio, sem segredos no Git.
-- `services/registrations/tests/`: 35 testes locais aprovados no STI (11 SQLite, 14 regras/contratos SQL, 3 verificacoes de seguranca e 7 testes do worker); integracao automatica no MySQL do notebook pendente.
-- `scripts/test_integration.py`: teste reproduzivel no MySQL real do container (200 tickets, 30 reservas, 170 esperando, sem overbooking).
-- `services/registrations/app/worker.py`: conciliacao SQLite/MySQL e processamento FIFO em processo separado, com recuperacao de ACK, promocao e expiracao (testes locais aprovados; integracao automatica no Docker a validar).
-- `scripts/test_worker_integration.py`: teste real de recusa, cancelamento, expiracao e promocao automatica no Docker.
-- `compose.yaml`, `infra/`, `frontend/`, `services/node/` e `services/notifications/`: infraestrutura Docker local com cinco servicos, gateway Fastify, Caddy e MySQL isolado. Ver `docs/EXECUCAO_LOCAL.md`.
+| Documento | Objetivo |
+| --- | --- |
+| [Arquitetura de Comunicação e Segurança de Rede](docs/ARQUITETURA_COMUNICACAO_SEGURANCA_REDE.md) | **Referência atual:** topologia, portas, matriz de conexões, fluxos Mermaid, autenticação/autorização, evidências e riscos |
+| [Checkpoint 04/11](docs/CHECKPOINT_2026-11-04.md) | Estado atual, frontend, aprendizagem e pendências |
+| [Checkpoint 03/11](docs/CHECKPOINT_2026-11-03.md) | Testes E2E, concorrência, failover, resultados e limitações |
+| [Handoff de Frontend](docs/FRONTEND_HANDOFF_2026-11-04.md) | Telas, contratos de API e validações visuais |
+| [Execução local](docs/EXECUCAO_LOCAL.md) | Operação **somente na fase final** do notebook; contém marcos históricos anteriores |
+| [Planejamento e ADRs](docs/planejamento/README.md) | Decisões DA-00 a DA-18, contratos/estados propostos e ADRs; preservar como histórico de decisões |
 
-## Testes locais (STI / Python 3.14)
+## Estrutura essencial
 
-```powershell
-python -m unittest discover -s services/registrations/tests -v
-```
+- `frontend/src/api.js`: acesso same-origin a `/api`, sem endereços hardcoded de containers ou do notebook.
+- `frontend/src/main.jsx`, `theme.css`, `EventHubMark.jsx`: interface e identidade C2 do EventHub.
+- `services/node/`: Gateway, Identity, Events, Payments e verificação de JWT/CSRF/RBAC.
+- `services/registrations/app/`: FIFO, SQLite, InnoDB, worker, conciliação, Outbox e isolamento por titular.
+- `services/notifications/`: inbox simulada idempotente.
+- `compose.yaml` e `infra/`: containers, redes e inicialização do MySQL/Caddy.
+- `scripts/`: testes HTTP E2E, pagamentos, notificações, concorrência, contingência e validação visual.
 
-O modulo SQLite **nao concede vagas nem confirma pagamentos**. O banco MySQL/InnoDB do servico Inscricoes sera a autoridade da ocupacao; o worker FIFO devera conciliar tickets em ordem, sem overbooking e com idempotencia apos falhas.
+## Regras de integridade e segurança
 
-## MVP contratado — proximas etapas
+**O SQLite não concede vagas; MySQL/InnoDB é a autoridade de ocupação.** Um ticket durável significa pedido recebido, não vaga garantida. Operações usam idempotência, autorização por recurso, versão de capacidade e recuperação FIFO.
 
-1. Eventos (Node/Fastify): atividade, capacidade, publicacao sincronizada.
-2. Inscricoes (Python/FastAPI): API interna, worker FIFO, reserva transacional MySQL, fallback SQLite e conciliacao.
-3. Pagamentos simulados (Node/Fastify): recusa definitiva, expiracao e status incerto.
-4. Identidade (Node/Fastify): JWT/RBAC, titularidade e CSRF, gateway Fastify.
-5. Notificacoes (Python/FastAPI): entrega assincrona e Outbox.
-6. Frontend React/Vite, Caddy e Docker Compose reproduzivel; testes de ponta a ponta e concorrencia.
+**A rede interna Docker não torna os serviços automaticamente seguros para a Internet.** O modelo atual usa HTTP interno e segredo compartilhado; o Compose local configura cookie sem `Secure` para HTTP loopback. O hardening público, TLS, rotação de chaves, rate limiting, backup/restore e watchdog ainda dependem de trabalho próprio. Ver a [matriz de riscos](docs/ARQUITETURA_COMUNICACAO_SEGURANCA_REDE.md).
 
-Check-in, Certificados e Relatorios permanecem **modelados, nao implementados**.
+Não guardar credenciais, tokens, CPF bruto ou dados pessoais sensíveis no Git; não apagar volumes, sobrescrever alterações humanas ou usar force-push para conciliar ambientes.
 
-## Relatorio academico
+## Relatório acadêmico
 
-Versao Word com tres referencias externas verificadas:
-[EventHub — Trabalho 2 (Google Drive)](https://docs.google.com/document/d/1_lwlon_uL-YsAR1mvd0VmmdM-slXDAzd/edit)
-
-**Seguranca:** nunca gravar chaves, tokens ou dados de producao no Git. Nenhum deploy em producao esta implicito na autorizacao de iniciar o desenvolvimento.
+[EventHub — Trabalho 2 (Google Drive)](https://docs.google.com/document/d/1_lwlon_uL-YsAR1mvd0VmmdM-slXDAzd/edit). O relatório registra os testes executados até 03/11; futuras revisões devem distinguir resultados realmente reexecutados de contratos e cenários apenas documentados.

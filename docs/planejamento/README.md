@@ -10,6 +10,10 @@ Plataforma de eventos academicos/profissionais: criacao de eventos e atividades;
 
 O foco da entrega e defender uma arquitetura de microsservicos com fluxo executavel, testes de concorrencia e falhas, contratos, diagramas, ADRs e trade-offs. Requisito do enunciado: projetar cerca de 6 a 10 candidatos e implementar preferencialmente 4 a 6, com ao menos duas tecnologias de backend.
 
+## Referencia atual de implementacao e seguranca
+
+**Atenção:** este diretório preserva propostas e decisões de planejamento, algumas já superadas por código e testes posteriores. Para a topologia **AS-IS**, a matriz implementada de conexões, fluxos, mecanismos de defesa e riscos de produção, consultar [Arquitetura de Comunicação e Segurança de Rede](../ARQUITETURA_COMUNICACAO_SEGURANCA_REDE.md) (04/11/2026). Essa consolidação não modifica retroativamente as DAs/ADRs e não autoriza antecipar a integração no notebook.
+
 ## Documentos
 - decisoes-arquiteturais.md — decisoes APROVADAS, justificativas e restricoes.
 - fluxos-e-estados.md — inscricao, pagamento, fallback, observabilidade e diagramas conceituais.
