@@ -106,6 +106,8 @@ class TicketStore:
                   WHERE status IN ('REGISTRADO','EM_FILA','RESERVADO','EM_VERIFICACAO','CONFIRMADO');
                 CREATE INDEX IF NOT EXISTS idx_fifo
                   ON ticket_requests(atividade_id, numero_ticket);
+                CREATE INDEX IF NOT EXISTS idx_owned_recent
+                  ON ticket_requests(user_id, created_at DESC);
                 CREATE TABLE IF NOT EXISTS published_activities (
                     atividade_id TEXT PRIMARY KEY,
                     publication_version INTEGER NOT NULL CHECK (publication_version > 0),
@@ -223,6 +225,31 @@ class TicketStore:
                 (inscricao_id, user_id)
             ).fetchone()
             return self._ticket(row) if row else None
+
+    def list_owned(self, user_id: str, limit: int = 50, offset: int = 0) -> dict:
+        """Historico persistente do titular, sem expor CPF/hash ou outros usuarios.
+
+        A leitura usa somente SQLite e permanece disponivel na queda do MySQL.
+        O estado pode aguardar a conciliacao do worker.
+        """
+        if not user_id or not 1 <= limit <= 100 or not 0 <= offset <= 10000:
+            raise TicketError("PAGINACAO_INVALIDA")
+        with self._connect() as connection:
+            total = connection.execute(
+                "SELECT COUNT(*) FROM ticket_requests WHERE user_id=?", (user_id,)
+            ).fetchone()[0]
+            rows = connection.execute(
+                """SELECT inscricao_id, atividade_id, numero_ticket, status AS estado, created_at
+                   FROM ticket_requests WHERE user_id=?
+                   ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?""",
+                (user_id, limit, offset),
+            ).fetchall()
+        return {
+            "inscricoes": [dict(row) for row in rows],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
 
     def pending_for_activity(self, atividade_id: str) -> list[Ticket]:
         """Fila ordenada; NAO concede vagas nem ultrapassa MySQL."""

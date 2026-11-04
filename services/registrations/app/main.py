@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from .capacity_store import CapacityError, CapacityStore
@@ -202,6 +202,16 @@ async def register(data: Register, request: Request):
                      "O resultado sera atualizado no painel de tickets "
                      "e nas notificacoes simuladas da sua conta.")),
     }
+
+
+@app.get("/internal/inscricoes")
+def list_registrations(request: Request,
+                       limit: int = Query(default=50, ge=1, le=100),
+                       offset: int = Query(default=0, ge=0, le=10000)):
+    user = caller(request)
+    if not user:
+        raise HTTPException(401, detail="NAO_AUTENTICADO")
+    return queue().list_owned(user["sub"], limit=limit, offset=offset)
 
 
 @app.get("/internal/inscricoes/{inscricao_id}")

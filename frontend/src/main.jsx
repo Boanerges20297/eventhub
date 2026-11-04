@@ -1,5 +1,7 @@
 import React, {useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
+import './theme.css';
+import EventHubMark from './EventHubMark.jsx';
 
 function App(){
   const [user,setUser]=useState(null);
@@ -43,6 +45,23 @@ function App(){
     }).catch(()=>{});
     fetch('/api/eventos').then(r=>r.json()).then(x=>setEvents(x.eventos||[])).catch(()=>{});
   },[]);
+  // Inscricoes pertencem a conta, nunca somente ao estado da sessao.
+  async function loadTickets(){
+    const data=await api('/inscricoes?limit=50');
+    setMyTickets(data.inscricoes||[]);
+  }
+  useEffect(()=>{
+    if(!user?.id){setMyTickets([]);return;}
+    let active=true;
+    fetch('/api/inscricoes?limit=50',{credentials:'same-origin'})
+      .then(async response=>{
+        if(!response.ok) throw Error('Nao foi possivel carregar suas inscricoes.');
+        return response.json();
+      })
+      .then(data=>{if(active)setMyTickets(data.inscricoes||[]);})
+      .catch(err=>{if(active)setMessage(err.message);});
+    return ()=>{active=false;};
+  },[user?.id]);
   async function login(evt){
     evt.preventDefault();setMessage('');
     try{
@@ -92,14 +111,23 @@ function App(){
     try{
       const data=await api('/inscricoes','POST',
         {atividade_id:selected,cpf},crypto.randomUUID());
-      setMyTickets(old=>[{...data},...old]);
+      setMyTickets(old=>old.some(t=>t.inscricao_id===data.inscricao_id)
+        ?old:[{...data},...old]);
       setMessage(data.mensagem);
+      await loadTickets().catch(()=>{});
     }catch(e){setMessage(e.message);}
   }
   async function refreshTicket(id){
     try{
       const data=await api('/inscricoes/'+id);
       setMyTickets(old=>old.map(item=>item.inscricao_id===id?{...item,...data}:item));
+    }catch(e){setMessage(e.message);}
+  }
+  async function cancelTicket(id){
+    try{
+      const result=await api('/inscricoes/'+id+'/cancelar','POST',{});
+      await loadTickets();
+      setMessage('Inscricao atualizada: '+result.estado);
     }catch(e){setMessage(e.message);}
   }
   async function loadNotifications(){
@@ -121,14 +149,47 @@ function App(){
   const box={border:'1px solid #d5dfe8',borderRadius:12,padding:20,background:'#fff'};
   const input={display:'block',width:'100%',padding:10,margin:'5px 0 12px',borderRadius:6,border:'1px solid #bac7d6',boxSizing:'border-box'};
   const button={border:0,borderRadius:7,padding:'10px 14px',background:'#164f78',color:'white',cursor:'pointer',marginRight:8};
-  return <main style={{fontFamily:'system-ui, sans-serif',background:'#f3f6f8',minHeight:'100vh',color:'#203749',padding:28}}>
-    <div style={{maxWidth:920,margin:'0 auto'}}>
-      <header style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:24}}>
-        <div><h1 style={{margin:0}}>EventHub</h1><p style={{margin:'6px 0',color:'#577086'}}>MVP academico • demonstracao local</p></div>
-        {user&&<button style={button} onClick={logout}>Sair</button>}
-      </header>
-      {message&&<p role="status" style={{...box,background:'#eaf1f6'}}>{message}</p>}
-      {!user&&<section style={{...box,maxWidth:460,margin:'0 auto'}}>
+  return <main className="eh-app" style={{fontFamily:'system-ui, sans-serif',background:'#f3f6f8',minHeight:'100vh',color:'#203749',padding:28}}>
+    <div className="eh-shell">
+      {user&&<nav className="eh-sitebar" aria-label="Navegação principal">
+        <a className="eh-brand" href="#visao-geral" aria-label="EventHub — início"><span className="eh-brand-symbol"><EventHubMark size={45}/></span><span className="eh-brand-word">Event<span>Hub</span></span></a>
+        <div className="eh-nav-tabs">
+          <a className="eh-nav-link is-current" href="#visao-geral">Início</a>
+          <a className="eh-nav-link" href="#eventos">Explorar eventos</a>
+          {organizer&&<a className="eh-nav-link" href="#organizacao">Organizar</a>}
+          {participant&&<a className="eh-nav-link" href="#inscricao">Minhas inscrições</a>}
+          <a className="eh-nav-link" href="#notificacoes">Atualizações</a>
+        </div>
+        <span className="eh-user-chip" title={'Perfil: '+user.role}>● <span>Meu espaço</span></span>
+      </nav>}
+      <div className="eh-main">
+        <header className="eh-topbar">
+          <div><span className="eh-heading-overline">EVENTHUB / WORKSPACE</span><h1>{user?'Painel de eventos':'EventHub'}</h1><p>Plataforma de eventos, programacao e inscricoes</p></div>
+          {user&&<button className="eh-outline" style={button} onClick={logout}>Sair</button>}
+        </header>
+        <div className="eh-page" id="visao-geral">
+          {user&&<section className="eh-feature" aria-label="Destaque">
+            <div className="eh-feature-copy">
+              <span className="eh-kicker"><span className="eh-kicker-dot"></span> CONECTE PESSOAS E EXPERIÊNCIAS</span>
+              <h2>{organizer?<>Eventos que <em>acontecem.</em><br/><span className="eh-headline-strong">Histórias que ficam.</span></>:<>Sua próxima <em>experiência</em><br/>começa aqui.</>}</h2>
+              <p>{organizer?'Um espaço para criar, publicar e acompanhar seus eventos sem perder o essencial: as pessoas.':'Descubra encontros, atividades e novas possibilidades. Tudo em um só lugar.'}</p>
+              <a className="eh-hero-cta" href={organizer?'#organizacao':'#eventos'}>{organizer?'Criar um evento':'Explorar eventos'} <span aria-hidden="true">↗</span></a>
+            </div>
+            <div className="eh-spotlight" aria-label="Evento em destaque">
+              <div className="eh-spotlight-art"><span className="eh-orbit orbit-a"></span><span className="eh-orbit orbit-b"></span><span className="eh-spark">✳</span></div>
+              <span className="eh-spotlight-label">✦ EM DESTAQUE</span>
+              <strong>{events.length?events[0].title:'Seu próximo evento merece destaque.'}</strong>
+              <span className="eh-spotlight-meta">{events.length?String(events[0].atividades||0)+' atividades publicadas':'A vitrine das experiências começa aqui.'}</span>
+              <a href="#eventos">Ver catálogo <span aria-hidden="true">↗</span></a>
+            </div>
+          </section>}
+          {user&&<div className="eh-stats">
+            <div className="eh-stat"><span className="eh-stat-mark">▦</span><span className="eh-stat-label">Eventos publicados</span><strong className="eh-stat-number">{events.length}</strong><span className="eh-stat-hint">Visíveis no catálogo</span></div>
+            <div className="eh-stat"><span className="eh-stat-mark">◫</span><span className="eh-stat-label">Atividades publicadas</span><strong className="eh-stat-number">{events.reduce((total,ev)=>total+Number(ev.atividades||0),0)}</strong><span className="eh-stat-hint">Total anunciado pelos eventos</span></div>
+            {participant&&<div className="eh-stat"><span className="eh-stat-mark">♧</span><span className="eh-stat-label">Minhas inscrições recentes</span><strong className="eh-stat-number">{myTickets.length}</strong><span className="eh-stat-hint">Até 50 carregadas</span></div>}
+          </div>}
+          {message&&<p className="eh-notice" role="status" style={{...box,background:'#eaf1f6'}}>{message}</p>}
+      {!user&&<section className="eh-panel" style={{...box,maxWidth:460,margin:'0 auto'}}>
         <h2>{mode==='login'?'Entrar':'Criar conta de participante'}</h2>
         <form onSubmit={login}>
           <label>E-mail<input style={input} type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label>
@@ -139,8 +200,8 @@ function App(){
           </button>
         </form>
       </section>}
-      {user&&<p>Perfil: <strong>{user.role}</strong> {user.org_id?'• Organizacao: '+user.org_id:''}</p>}
-      {organizer&&<section style={box}>
+      {user?.org_id&&<p className="eh-footer">Organização vinculada: {user.org_id}</p>}
+      {organizer&&<section id="organizacao" className="eh-panel" style={box}>
         <h2>Organizacao de atividades</h2>
         <form onSubmit={createEvent}>
           <label>Titulo do evento<input style={input} value={eventTitle} onChange={e=>setEventTitle(e.target.value)} minLength="3" required/></label>
@@ -154,30 +215,35 @@ function App(){
           <p><button style={button}>Criar e sincronizar atividade</button></p>
         </form>}
       </section>}
-      <section style={{...box,marginTop:18}}>
+      <section id="eventos" className="eh-panel" style={{...box,marginTop:18}}>
         <h2>Eventos publicados</h2>
         <button style={button} onClick={()=>refreshEvents().catch(e=>setMessage(e.message))}>Atualizar lista</button>
         {!events.length&&<p>Nenhum evento com atividade publicada.</p>}
-        {events.map(ev=><div key={ev.id} style={{borderTop:'1px solid #ddd',marginTop:12,paddingTop:12}}>
+        {events.map(ev=><div className="eh-event-item" key={ev.id} style={{borderTop:'1px solid #ddd',marginTop:12,paddingTop:12}}>
           <strong>{ev.title}</strong> • {ev.atividades} atividades
           <p><button style={button} onClick={()=>loadActivities(ev.id)}>Ver atividades</button></p>
-          {(activities[ev.id]||[]).map(a=><p key={a.atividade_id} style={{padding:8,background:'#f0f5f8'}}>
+          {(activities[ev.id]||[]).map(a=><p className="eh-activity-item" key={a.atividade_id} style={{padding:8,background:'#f0f5f8'}}>
             {a.titulo} • {a.capacidade} vagas • {a.gratuita?'gratuita':'R$ '+(a.preco_centavos/100).toFixed(2)}
             {participant&&<button style={{...button,marginLeft:12}} onClick={()=>setSelected(a.atividade_id)}>Selecionar</button>}
           </p>)}
         </div>)}
       </section>
-      {participant&&<section style={{...box,marginTop:18}}>
+      {participant&&<section id="inscricao" className="eh-panel" style={{...box,marginTop:18}}>
         <h2>Inscricao</h2>
         <form onSubmit={register}>
           <label>Atividade selecionada<input style={input} value={selected} onChange={e=>setSelected(e.target.value)} required/></label>
           <label>CPF do participante<input style={input} value={cpf} onChange={e=>setCpf(e.target.value)} required/></label>
           <button style={button}>Solicitar vaga</button>
         </form>
-        <h3>Meus tickets nesta sessao</h3>
-        {myTickets.map(t=><p key={t.inscricao_id}>
+        <h3>Minhas inscricoes</h3>
+        <p>Historico vinculado a sua conta, inclusive apos sair e entrar novamente.</p>
+        <button style={{...button,background:'#48677a'}} onClick={()=>loadTickets().catch(e=>setMessage(e.message))}>Atualizar inscricoes</button>
+        {!myTickets.length&&<p>Nenhuma inscricao encontrada.</p>}
+        {myTickets.map(t=><p className="eh-ticket-row" key={t.inscricao_id}>
           <strong>Ticket {t.numero_ticket}</strong> — {t.estado}
           <button style={{...button,marginLeft:8}} onClick={()=>refreshTicket(t.inscricao_id)}>Consultar</button>
+          {['RESERVADO','EM_FILA','CONFIRMADO'].includes(t.estado)&&
+            <button style={{...button,background:'#8d4851'}} onClick={()=>cancelTicket(t.inscricao_id)}>Cancelar inscricao</button>}
           {t.estado==='RESERVADO'&&<span style={{display:'inline-flex',gap:6,flexWrap:'wrap',marginTop:8}}>
             <button style={button} onClick={()=>simulatePayment(t.inscricao_id,'PAGO')}>Simular aprovado</button>
             <button style={button} onClick={()=>simulatePayment(t.inscricao_id,'RECUSADO_DEFINITIVO')}>Simular recusa</button>
@@ -185,7 +251,7 @@ function App(){
           </span>}
         </p>)}
       </section>}
-      {user&&<section style={{...box,marginTop:18}}>
+      {user&&<section id="notificacoes" className="eh-panel" style={{...box,marginTop:18}}>
         <h2>Minhas notificacoes</h2>
         <p>Eventos persistidos e entregues em modo simulacao, sem envio de e-mail.</p>
         <button style={button} onClick={loadNotifications}>Atualizar notificacoes</button>
@@ -194,7 +260,9 @@ function App(){
           Inscricao {n.inscricao_id.slice(0,8)} • <strong>{n.estado_inscricao}</strong> • {n.entrega}
         </p>)}
       </section>}
-      <p style={{color:'#718593',fontSize:13,marginTop:24}}>Interface de teste funcional. Pagamentos e notificacoes simulados, sem operacoes financeiras ou e-mails reais. Contingencia permanece em desenvolvimento.</p>
+          <p className="eh-footer" style={{color:'#718593',fontSize:13,marginTop:24}}>Ambiente de validacao: pagamentos e notificacoes ainda sao simulados, sem transacoes financeiras ou e-mails reais. Capacidade e fila contam com testes de contingencia; nenhuma operacao de producao esta habilitada.</p>
+        </div>
+      </div>
     </div>
   </main>;
 }

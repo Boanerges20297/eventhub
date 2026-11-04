@@ -88,11 +88,26 @@ async function main(){
   }
   r=await people[1].call('GET','/inscricoes/'+ids[0]);
   assert.equal(r.status,404);
+  const anonymous=new Client();
+  assert.equal((await anonymous.call('GET','/inscricoes')).status,401);
+  r=await people[0].call('GET','/inscricoes?limit=1&offset=0');
+  assert.equal(r.status,200,JSON.stringify(r.body));
+  assert.ok(r.body.total>=1);
+  assert.equal(r.body.inscricoes[0].inscricao_id,ids[0]);
+  assert.equal('cpf_digest' in r.body.inscricoes[0],false);
+  r=await people[1].call('GET','/inscricoes?limit=50');
+  assert.equal(r.status,200,JSON.stringify(r.body));
+  assert.equal(r.body.inscricoes.some(item=>item.inscricao_id===ids[0]),false);
+  r=await people[0].call('GET','/inscricoes?limit=101');
+  assert.equal(r.status,422);
   await awaitStatus(people[0],ids[0],'RESERVADO');
   await awaitStatus(people[1],ids[1],'RESERVADO');
   await awaitStatus(people[2],ids[2],'EM_FILA');
   r=await people[0].call('POST','/inscricoes/'+ids[0]+'/cancelar',{});
   assert.equal(r.status,200,JSON.stringify(r.body));
+  r=await people[0].call('GET','/inscricoes?limit=50');
+  assert.equal(r.status,200,JSON.stringify(r.body));
+  assert.equal(r.body.inscricoes.find(item=>item.inscricao_id===ids[0]).estado,'CANCELADO');
   await awaitStatus(people[2],ids[2],'RESERVADO');
   console.log('HTTP_E2E_OK', 'event='+event, 'activity='+activity,
     'auth=true csrf=true rbac=true idempotency=true ownership=true fifo=true promotion=true');

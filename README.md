@@ -4,9 +4,9 @@ Trabalho 2 da disciplina **Arquitetura de Software** (Mestrado UECE), entrega pr
 
 ## Estado atual
 
-O fluxo HTTP autenticado de organizacao, atividade, inscricao, cancelamento e promocao FIFO foi validado no notebook; pagamentos simulados estao em integracao e notificacoes/outbox continuam pendentes. **O MVP completo e o deploy em producao ainda nao estao prontos.**
+Cinco microsservicos executam publicacao, inscricao, FIFO, pagamentos simulados e Outbox/notificacoes. O ensaio de 03/11 com 200 pedidos durante queda real de MySQL (30 vagas) validou conciliacao sem overbooking no Docker isolado. Em 04/11 iniciamos a evolucao para uma plataforma: historico persistente das inscricoes e cancelamento pela interface foram implementados no STI, com testes locais aprovados; a prova HTTP no notebook esta pendente. **Pagamentos reais e deploy publico nao estao prontos.**
 
-**Checkpoint operacional:** [docs/CHECKPOINT_2026-11-02.md](docs/CHECKPOINT_2026-11-02.md) — evidencias, pendencias, comandos de recuperacao e proximas prioridades ate 06/11.
+**Checkpoint atual:** [docs/CHECKPOINT_2026-11-04.md](docs/CHECKPOINT_2026-11-04.md). Evidencias dos ensaios: [03/11](docs/CHECKPOINT_2026-11-03.md).
 
 ## Estrutura
 

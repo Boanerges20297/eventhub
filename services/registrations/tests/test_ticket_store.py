@@ -87,6 +87,30 @@ class TicketStoreTest(unittest.TestCase):
         with self.assertRaisesRegex(TicketError, "ESTADO_DESATUALIZADO"):
             self.store.update_from_worker(first.inscricao_id, "REGISTRADO", "CANCELADO")
 
+    def test_list_owned_persists_is_scoped_and_paginated(self):
+        first = self.issue(1, user="alice")
+        self.issue(2, user="bob")
+        latest = self.issue(3, user="alice", activity="B")
+        page1 = self.store.list_owned("alice", limit=1)
+        self.assertEqual(page1["total"], 2)
+        self.assertEqual(page1["inscricoes"][0]["inscricao_id"], latest.inscricao_id)
+        page2 = self.store.list_owned("alice", limit=1, offset=1)
+        self.assertEqual(page2["inscricoes"][0]["inscricao_id"], first.inscricao_id)
+        self.assertEqual(self.store.list_owned("bob")["total"], 1)
+        self.assertEqual(self.store.list_owned("other")["total"], 0)
+        self.assertEqual(page1["inscricoes"][0]["estado"], "REGISTRADO")
+        self.assertNotIn("status", page1["inscricoes"][0])
+        self.assertNotIn("cpf_digest", page1["inscricoes"][0])
+        self.assertNotIn("idempotency_key", page1["inscricoes"][0])
+        restarted = TicketStore(self.path, "test-secret-only-not-for-prod")
+        self.assertEqual(restarted.list_owned("alice")["total"], 2)
+
+    def test_list_owned_rejects_unbounded_queries(self):
+        for limit, offset in ((0, 0), (101, 0), (5, -1), (5, 10001)):
+            with self.subTest(limit=limit, offset=offset):
+                with self.assertRaisesRegex(TicketError, "PAGINACAO_INVALIDA"):
+                    self.store.list_owned("alice", limit, offset)
+
     def test_persistence_across_restart(self):
         first = self.issue(1)
         restarted = TicketStore(self.path, "test-secret-only-not-for-prod")

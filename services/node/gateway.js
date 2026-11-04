@@ -41,6 +41,7 @@ function install(server){
     ['POST', /^\/atividades\/([^/]+)\/sincronizar$/,events,m=>'/internal/atividades/'+m[1]+'/sincronizar','organizer'],
     ['GET', /^\/atividades\/([^/]+)$/,events,m=>'/internal/atividades/'+m[1],'public'],
     ['POST', /^\/inscricoes$/,registrations,'/internal/inscricoes','participant'],
+    ['GET', /^\/inscricoes$/,registrations,'/internal/inscricoes','authenticated'],
     ['POST', /^\/pagamentos\/([^/]+)\/simular$/,process.env.PAYMENTS_URL||'http://payments:3000',m=>'/internal/pagamentos/'+m[1]+'/simular','participant'],
     ['GET', /^\/pagamentos\/([^/]+)$/,process.env.PAYMENTS_URL||'http://payments:3000',m=>'/internal/pagamentos/'+m[1],'authenticated'],
     ['GET', /^\/inscricoes\/([^/]+)$/,registrations,m=>'/internal/inscricoes/'+m[1],'authenticated'],
@@ -94,6 +95,9 @@ function install(server){
       if(method!=='GET'&&!same(request.headers['x-csrf-token'],csrf(token)))
         return reply.code(403).send({error:'CSRF_INVALIDO'});
       const route=typeof target==='function'?target(match):target;
+      // Preserve only the validated listing parameters for the owner-scoped API.
+      const query=(method==='GET' && path==='/inscricoes')
+        ? new URL(request.url,'http://eventhub.internal').search : '';
       const body={...(request.body||{})};
       if(method==='POST'&&(path==='/inscricoes'||/^\/pagamentos\/[^/]+\/simular$/.test(path))){
         body.idempotency_key=request.headers['idempotency-key'];
@@ -102,7 +106,7 @@ function install(server){
       // confirmar o ticket apos o timeout curto do proxy. Nao responder 503
       // prematuramente quando o backend ainda esta processando o pedido.
       const timeoutMs=path==='/inscricoes' && method==='POST' ? 45000 : 5000;
-      const r=await requestTo(base+route,method,body,p,timeoutMs);
+      const r=await requestTo(base+route+query,method,body,p,timeoutMs);
       return reply.code(r.status).send(r.data);
     }
     return reply.code(404).send({error:'ROTA_NAO_ENCONTRADA'});
