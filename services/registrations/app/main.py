@@ -249,6 +249,76 @@ def activity_summary(atividade_id: str, request: Request):
         "total_registradas": sum(counts.values()),
     }
 
+@app.get("/internal/atividades/{atividade_id}/inscricoes")
+def activity_registrations(
+    atividade_id: str,
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10000),
+    estado: str | None = Query(default=None, max_length=24),
+):
+    """Read-only list of processed tickets for an authorized organizer.
+
+    Caller is the Events service, which has already checked org ownership.
+    Do not export CPF, digest, email, user_id or payment details. MySQL is the
+    authoritative source for processed registration status. SQLite-only tickets
+    awaiting reconciliation are intentionally not included in this listing.
+    """
+    caller(request)
+    if not atividade_id or len(atividade_id) > 64:
+        raise HTTPException(400, detail="ATIVIDADE_INVALIDA")
+    states = {
+        "REGISTRADO", "EM_FILA", "RESERVADO", "EM_VERIFICACAO",
+        "CONFIRMADO", "RECUSADO", "EXPIRADO", "CANCELADO", "SEM_VAGA",
+    }
+    if estado is not None and estado not in states:
+        raise HTTPException(400, detail="ESTADO_INVALIDO")
+    connection = connect_mysql()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT atividade_id FROM activity_capacity WHERE atividade_id=%s",
+                (atividade_id,),
+            )
+            if not cursor.fetchone():
+                raise HTTPException(404, detail="ATIVIDADE_NAO_SINCRONIZADA")
+            condition = "atividade_id=%s"
+            params = [atividade_id]
+            if estado:
+                condition += " AND status=%s"
+                params.append(estado)
+            cursor.execute(
+                f"SELECT COUNT(*) AS quantidade FROM registrations WHERE {condition}",
+                tuple(params),
+            )
+            total = int(cursor.fetchone()["quantidade"])
+            cursor.execute(
+                "SELECT inscricao_id,numero_ticket,status "
+                f"FROM registrations WHERE {condition} "
+                "ORDER BY numero_ticket ASC LIMIT %s OFFSET %s",
+                tuple([*params, limit, offset]),
+            )
+            rows = cursor.fetchall()
+    finally:
+        connection.close()
+    return {
+        "atividade_id": atividade_id,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "estado": estado,
+        "origem": "mysql_processadas",
+        "inscricoes": [
+            {
+                "inscricao_id": row["inscricao_id"],
+                "numero_ticket": int(row["numero_ticket"]),
+                "estado": row["status"],
+            }
+            for row in rows
+        ],
+    }
+
+
 @app.get("/internal/inscricoes")
 def list_registrations(request: Request,
                        limit: int = Query(default=50, ge=1, le=100),

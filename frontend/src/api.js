@@ -15,6 +15,9 @@ export const routes=Object.freeze({
   editEvent:id=>'/me/eventos/'+encodeURIComponent(id),
   editActivity:id=>'/me/atividades/'+encodeURIComponent(id),
   activitySummary:id=>'/me/atividades/'+encodeURIComponent(id)+'/resumo',
+  activityRegistrations:(id,{limit=20,offset=0,estado=''}={})=>
+    '/me/atividades/'+encodeURIComponent(id)+'/inscricoes?limit='+limit+'&offset='+offset+
+    (estado?'&estado='+encodeURIComponent(estado):''),
   synchronizeActivity:id=>'/atividades/'+encodeURIComponent(id)+'/sincronizar',
 
   eventActivities:eventId=>'/eventos/'+encodeURIComponent(eventId)+'/atividades',

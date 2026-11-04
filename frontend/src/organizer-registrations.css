@@ -1,0 +1,20 @@
+.eh-manager-reg-list{margin-top:13px;padding-top:11px;border-top:1px solid #e5ebf4}
+.eh-app button.eh-manager-reg-toggle{padding:9px 12px!important;margin:0!important;min-height:35px}
+.eh-manager-reg-panel{background:#f7faff;border:1px solid #dae5f5;border-radius:11px;margin-top:13px;padding:16px;min-width:0}
+.eh-manager-reg-header{display:flex;justify-content:space-between;align-items:flex-start;gap:9px;flex-wrap:wrap}
+.eh-manager-reg-header h4{font-size:15px;margin:0 0 5px;color:#1c3255}
+.eh-manager-reg-header p{font-size:11px;color:#566b84;line-height:1.4;margin:0}
+.eh-app .eh-manager-reg-header button{margin:0!important;padding:8px 10px}
+.eh-manager-reg-panel label{font-size:12px;margin-top:16px;margin-bottom:6px}
+.eh-manager-reg-panel select{font:inherit;font-size:12px;width:100%;max-width:310px;border:1px solid #cbd8e3;background:white;border-radius:8px;min-height:39px;padding:7px 10px}
+.eh-manager-reg-count{font-size:11px;font-weight:700;color:#536884;margin:16px 0 7px}
+.eh-manager-reg-table-wrap{max-width:100%;overflow-x:auto}
+.eh-manager-reg-table{width:100%;border-collapse:collapse;min-width:220px;font-size:12px}
+.eh-manager-reg-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:#536884;padding:9px 11px;background:#e9f0ff}
+.eh-manager-reg-table td{border-bottom:1px solid #e4eaf4;padding:10px 11px;color:#1d3657;font-variant-numeric:tabular-nums}
+.eh-manager-reg-state{display:inline-block;border-radius:99px;padding:5px 9px;background:#e8effb;font-size:11px;font-weight:720;color:#334d8a}
+.eh-manager-reg-pagination{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:13px;flex-wrap:wrap}
+.eh-manager-reg-pagination span{font-size:11px;color:#61768b;font-variant-numeric:tabular-nums}
+.eh-app .eh-manager-reg-pagination button{margin:0!important;padding:7px 12px}
+.eh-manager-reg-note{font-size:11px;line-height:1.55;color:#61768b;margin:16px 0 0}
+.eh-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}

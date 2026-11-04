@@ -40,6 +40,7 @@ function install(server){
     ['PATCH', /^\/me\/eventos\/([^/]+)$/,events,m=>'/internal/me/eventos/'+m[1],'organizer'],
     ['PATCH', /^\/me\/atividades\/([^/]+)$/,events,m=>'/internal/me/atividades/'+m[1],'organizer'],
     ['GET', /^\/me\/atividades\/([^/]+)\/resumo$/,events,m=>'/internal/me/atividades/'+m[1]+'/resumo','organizer'],
+    ['GET', /^\/me\/atividades\/([^/]+)\/inscricoes$/,events,m=>'/internal/me/atividades/'+m[1]+'/inscricoes','organizer'],
     ['GET', /^\/eventos$/,events,'/internal/eventos','public'],
     ['GET', /^\/eventos\/([^/]+)\/atividades$/,events,m=>'/internal/eventos/'+m[1]+'/atividades','public'],
     ['POST', /^\/eventos$/,events,'/internal/eventos','organizer'],
@@ -102,7 +103,7 @@ function install(server){
         return reply.code(403).send({error:'CSRF_INVALIDO'});
       const route=typeof target==='function'?target(match):target;
       // Preserve only the validated listing parameters for the owner-scoped API.
-      const query=(method==='GET' && path==='/inscricoes')
+      const query=(method==='GET' && (path==='/inscricoes' || /^\/me\/atividades\/[^/]+\/inscricoes$/.test(path)))
         ? new URL(request.url,'http://eventhub.internal').search : '';
       const body={...(request.body||{})};
       if(method==='POST'&&(path==='/inscricoes'||/^\/pagamentos\/[^/]+\/simular$/.test(path))){

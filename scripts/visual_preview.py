@@ -74,6 +74,19 @@ class PreviewHandler(SimpleHTTPRequestHandler):
                            "em_fila": 0, "em_processamento": 0,
                            "total_registradas": 0},
             },
+            "/api/me/atividades/act-demo-001/inscricoes": {
+                "atividade_id": "act-demo-001",
+                "total": 3, "limit": 20, "offset": 0,
+                "estado": None, "origem": "mysql_processadas",
+                "inscricoes": [
+                    {"inscricao_id": "test-t1", "numero_ticket": 1,
+                     "estado": "CONFIRMADO"},
+                    {"inscricao_id": "test-t2", "numero_ticket": 2,
+                     "estado": "CONFIRMADO"},
+                    {"inscricao_id": "test-t3", "numero_ticket": 3,
+                     "estado": "EM_FILA"},
+                ],
+            },
             "/api/inscricoes": {"inscricoes": []},
             "/api/notificacoes": {"notificacoes": []},
         }

@@ -97,6 +97,14 @@ def main():
             time.sleep(.5)
             ensure(js("!!document.querySelector('.eh-manager-metrics') && document.querySelector('.eh-manager-metrics strong').textContent==='5'"),
                    "aggregate occupancy from independent service contract")
+            js("document.querySelector('.eh-manager-activity .eh-manager-reg-toggle').click()")
+            time.sleep(.45)
+            ensure(js("document.querySelectorAll('.eh-manager-reg-table tbody tr').length===3"),
+                   "private registration tickets rendered without personal data")
+            ensure(js("document.querySelector('.eh-manager-reg-table tbody tr td').textContent==='#1'"),
+                   "arrival order follows sequential tickets")
+            ensure(js("document.querySelector('.eh-manager-reg-panel').textContent.includes('3 inscrição')"),
+                   "processed count displayed")
             ensure(js("document.documentElement.scrollWidth<=innerWidth"),
                    "desktop no horizontal overflow")
             capture("eventhub-organizer-desktop-2026-11-04.png")
@@ -110,6 +118,10 @@ def main():
             ensure(js("!!document.querySelector('#eh-new-activity-title')"),
                    "add activity form available for draft")
 
+            js("document.querySelectorAll('.eh-manager-event')[0].click()")
+            time.sleep(.4)
+            js("document.querySelector('.eh-manager-activity .eh-manager-reg-toggle').click()")
+            time.sleep(.45)
             cdp.call("Emulation.setDeviceMetricsOverride", {
                 "width": 390, "height": 844, "deviceScaleFactor": 1,
                 "mobile": True, "screenWidth": 390, "screenHeight": 844,
