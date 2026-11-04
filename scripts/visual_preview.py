@@ -2,7 +2,10 @@
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import json
+import os
 import sys
+
+PREVIEW_ROLE = os.environ.get('EVENTHUB_PREVIEW_ROLE', 'admin')
 
 DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 48761
@@ -20,7 +23,13 @@ class PreviewHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         route = self.path.split("?", 1)[0]
         mock = {
-            "/api/auth/me": {"user": {"id": "demo-organizer", "role": "organizer", "org_id": "org-demo"}, "csrf": "preview-only"},
+            "/api/auth/me": {"user": {"id": "demo-user", "role": PREVIEW_ROLE, "org_id": "org-demo"}, "csrf": "preview-only"},
+            "/api/eventos/ev-demo-001/atividades": {"atividades": [
+                {"atividade_id": "act-demo-001", "titulo": "Laboratório de inovação",
+                 "capacidade": 48, "gratuita": True, "preco_centavos": 0},
+                {"atividade_id": "act-demo-002", "titulo": "Arquitetura e escala",
+                 "capacidade": 20, "gratuita": False, "preco_centavos": 1500},
+            ]},
             "/api/eventos": {"eventos": EVENTS},
             "/api/inscricoes": {"inscricoes": []},
             "/api/notificacoes": {"notificacoes": []},
