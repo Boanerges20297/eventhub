@@ -14,3 +14,15 @@ coverage/
 *.sqlite
 *.sqlite3
 *.log
+
+# Local CDP/browser caches and transfer snapshots (preserve on disk)
+/.codegraph/
+/.preview-browser*/
+/docs/eventhub-390-verified.png
+/docs/eventhub-preview-desktop.png
+/docs/eventhub-preview-mobile.png
+/docs/eventhub-preview-mobile2.png
+/docs/visual-dom-debug.html
+/docs/visual-dom-scale2.html
+/checkpoint-transfer.base64.txt
+/checkpoint-transfer.bundle
