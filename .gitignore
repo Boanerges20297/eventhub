@@ -16,7 +16,6 @@ coverage/
 *.log
 
 # Local CDP/browser caches and transfer snapshots (preserve on disk)
-/.codegraph/
 /.preview-browser*/
 /docs/eventhub-390-verified.png
 /docs/eventhub-preview-desktop.png
