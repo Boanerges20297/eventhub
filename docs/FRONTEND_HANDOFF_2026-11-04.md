@@ -57,3 +57,15 @@ A API de histórico de inscrições limita resultados a 50 itens na interface at
 ## Próxima frente de refinamento no STI
 
 Validar com o usuário as capturas e ajustes de cada tela; modularizar `frontend/src/main.jsx`, melhorar UX de formulário e estados de carregamento, evoluir as telas/contratos faltantes **sem ligar os containers do notebook**. Somente depois executar o empacotamento/integracão final no notebook, preservar resultados e documentar evidência no trabalho arquitetural.
+
+## Evolução de produto no notebook — gestão do organizador (04/11)
+
+**Complemento posterior ao planejamento acima:** a fase de integração no notebook foi autorizada e executada para a versão anterior, no commit `706e3dc`. O texto histórico "sem notebook" acima descreve somente o marco anterior.
+
+**Implementação nova ainda não publicada:** `frontend/src/OrganizerWorkspace.jsx` e `organizer.css` substituem o formulário isolado por uma gestão com lista privada de eventos da organização (inclusive rascunhos), seleção, edição de título/descrição, edição de título de atividade, estado de publicação, sincronização pendente e resumo agregado de ocupação. O frontend usa somente `requestApi` e rotas do Gateway.
+
+**Contratos novos:** `GET /api/me/eventos`, `GET /api/me/eventos/{id}/atividades`, `PATCH /api/me/eventos/{id}`, `PATCH /api/me/atividades/{id}` e `GET /api/me/atividades/{id}/resumo`. Autorização por `role` no Gateway e `org_id` no serviço Eventos. Ocupação é obtida por `Eventos → Inscrições /internal/atividades/{id}/resumo`, **sem acesso cruzado aos schemas SQL**; os números não expõem CPF/titulares. Edição de capacidade **não** é oferecida porque requer coordenação/versionamento entre os dois domínios.
+
+**Validações realizadas no notebook:** `npm run build --prefix frontend` exit 0 (28 módulos); `node --check` para Gateway/Eventos/teste novo, `python -m py_compile` para a API Inscrições e `git diff --check` aprovados. Teste direcionado `python scripts/test_organizer_ui.py` exit 0 com servidor mock isolado e Edge/CDP real: rascunhos, atividades, ocupação, campos e layout sem overflow em 390/1440px. Capturas: `docs/eventhub-organizer-desktop-2026-11-04.png` e `docs/eventhub-organizer-mobile-2026-11-04.png`. Corrigida a limpeza temporária do perfil CDP no Windows.
+
+**Aceite direcionado das APIs reais (04/11):** a reconstrução Docker do `eventhub` principal foi autorizada e concluída no notebook. `scripts/test_organizer_workspace_e2e.js` executou por Gateway/Events/Registrations reais e aprovou `ORGANIZER_WORKSPACE_E2E_OK` (exit 0): lista privada incluindo rascunho, edição de evento e atividade, publicação, resumo após inscrição, bloqueio RBAC de participante e ownership por organização. Cenário registrado: capacidade 3, ocupadas 1, livres 2. O ensaio criou dados sintéticos persistentes na instância principal de desenvolvimento, não foi um teste destrutivo. O visual responsivo foi testado com dados fictícios (Edge/CDP), distinguindo-se do teste HTTP integrado. **Não significa homologação de produção nem teste bancário/SMTP real.**

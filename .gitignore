@@ -25,3 +25,4 @@ coverage/
 /docs/visual-dom-scale2.html
 /checkpoint-transfer.base64.txt
 /checkpoint-transfer.bundle
+/.cdp-manager-*/

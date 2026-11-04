@@ -56,6 +56,80 @@ async function activityById(id) {
   return rows[0]||null;
 }
 function install(server){
+
+  // Private organizer dashboard: ownership is checked in this domain.
+  server.get('/internal/me/eventos',async(req,reply)=>{
+    const p=authorized(req,reply,['organizer','admin']);if(!p)return;
+    if(p.role==='organizer'&&!p.org_id)return reply.code(403).send({error:'ORGANIZACAO_OBRIGATORIA'});
+    const [rows]=await db().execute(
+      'SELECT e.id,e.title,e.description,e.org_id,e.created_at,COUNT(a.id) atividades_total,'
+      +" SUM(CASE WHEN a.capacity_state='CONCLUIDA' THEN 1 ELSE 0 END) atividades_publicadas,"
+      +" SUM(CASE WHEN a.capacity_state<>'CONCLUIDA' THEN 1 ELSE 0 END) atividades_pendentes"
+      +' FROM events e LEFT JOIN activities a ON a.event_id=e.id'
+      +(p.role==='admin'?'':' WHERE e.org_id=?')
+      +' GROUP BY e.id,e.title,e.description,e.org_id,e.created_at ORDER BY e.created_at DESC LIMIT 100',
+      p.role==='admin'?[]:[p.org_id]);
+    return {eventos:rows.map(e=>({...e,atividades_total:Number(e.atividades_total),
+      atividades_publicadas:Number(e.atividades_publicadas),atividades_pendentes:Number(e.atividades_pendentes)}))};
+  });
+  server.get('/internal/me/eventos/:id/atividades',async(req,reply)=>{
+    const p=authorized(req,reply,['organizer','admin']);if(!p)return;
+    const [events]=await db().execute('SELECT id,title,description,org_id FROM events WHERE id=?',[req.params.id]);
+    if(!events.length||!isOwner(p,events[0].org_id))
+      return reply.code(404).send({error:'EVENTO_NAO_ENCONTRADO'});
+    const [rows]=await db().execute(
+      'SELECT id,title,capacity,capacity_version,capacity_state,paid,price_cents,waitlist,hold_minutes'
+      +' FROM activities WHERE event_id=? ORDER BY created_at ASC',[req.params.id]);
+    return {evento:events[0],atividades:rows.map(a=>({
+      atividade_id:a.id,titulo:a.title,capacidade:Number(a.capacity),
+      capacidade_version:Number(a.capacity_version),sincronizacao:a.capacity_state,
+      publicada:a.capacity_state==='CONCLUIDA',gratuita:!a.paid,
+      preco_centavos:Number(a.price_cents),lista_espera_habilitada:!!a.waitlist,
+      prazo_reserva_min:Number(a.hold_minutes)}))};
+  });
+  server.patch('/internal/me/eventos/:id',async(req,reply)=>{
+    const p=authorized(req,reply,['organizer','admin']);if(!p)return;
+    const [rows]=await db().execute('SELECT title,description,org_id FROM events WHERE id=?',[req.params.id]);
+    if(!rows.length||!isOwner(p,rows[0].org_id))
+      return reply.code(404).send({error:'EVENTO_NAO_ENCONTRADO'});
+    const b=req.body||{};
+    if(!Object.hasOwn(b,'titulo')&&!Object.hasOwn(b,'descricao'))
+      return reply.code(400).send({error:'CAMPOS_OBRIGATORIOS'});
+    const title=Object.hasOwn(b,'titulo')?b.titulo:rows[0].title;
+    const description=Object.hasOwn(b,'descricao')?b.descricao:rows[0].description;
+    if(typeof title!=='string'||title.trim().length<3||title.trim().length>160
+       ||typeof description!=='string'||description.trim().length>4000)
+      return reply.code(400).send({error:'DADOS_INVALIDOS'});
+    await db().execute('UPDATE events SET title=?,description=? WHERE id=?',
+      [title.trim(),description.trim(),req.params.id]);
+    return {evento_id:req.params.id,titulo:title.trim(),descricao:description.trim()};
+  });
+  server.patch('/internal/me/atividades/:id',async(req,reply)=>{
+    const p=authorized(req,reply,['organizer','admin']);if(!p)return;
+    const row=await activityById(req.params.id);
+    if(!row||!isOwner(p,row.org_id))
+      return reply.code(404).send({error:'ATIVIDADE_NAO_ENCONTRADA'});
+    const title=req.body?.titulo;
+    if(typeof title!=='string'||title.trim().length<3||title.trim().length>160)
+      return reply.code(400).send({error:'DADOS_INVALIDOS'});
+    await db().execute('UPDATE activities SET title=? WHERE id=?',[title.trim(),row.id]);
+    return {atividade_id:row.id,titulo:title.trim()};
+  });
+  server.get('/internal/me/atividades/:id/resumo',async(req,reply)=>{
+    const p=authorized(req,reply,['organizer','admin']);if(!p)return;
+    const row=await activityById(req.params.id);
+    if(!row||!isOwner(p,row.org_id))
+      return reply.code(404).send({error:'ATIVIDADE_NAO_ENCONTRADA'});
+    if(row.capacity_state!=='CONCLUIDA')return {atividade_id:row.id,publicada:false,resumo:null};
+    try{
+      const r=await fetch((process.env.REGISTRATIONS_URL||'http://registrations:8000')
+        +'/internal/atividades/'+encodeURIComponent(row.id)+'/resumo',{
+          headers:asHeaders(null),signal:AbortSignal.timeout(5000)});
+      if(!r.ok)return reply.code(503).send({error:'RESUMO_INDISPONIVEL'});
+      return {atividade_id:row.id,publicada:true,resumo:await r.json()};
+    }catch{return reply.code(503).send({error:'RESUMO_INDISPONIVEL'});}
+  });
+
   server.get('/internal/eventos',async(request,reply)=>{
     try{internal(request);}catch{return reply.code(403).send({error:'SERVICO_NAO_AUTORIZADO'});}
     const [rows]=await db().query(

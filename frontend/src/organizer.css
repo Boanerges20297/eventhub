@@ -1,0 +1,59 @@
+/* Organization-owned EventHub workspace; readable on mobile and desktop. */
+.eh-manager-layout{display:grid;grid-template-columns:minmax(245px,320px) minmax(0,1fr);gap:24px;align-items:start}
+.eh-manager-sidebar{background:#f8faff;border:1px solid #e1e8f5;padding:19px;border-radius:15px;min-width:0}
+.eh-manager-sidebar-header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.eh-app section.eh-panel .eh-manager-sidebar h3,.eh-app section.eh-panel .eh-manager-create h3,.eh-app section.eh-panel .eh-manager-create-activity h3{margin:0 0 15px;font-size:16px;color:#192a4a}
+.eh-app .eh-manager-sidebar-header .eh-outline{padding:7px 9px;min-height:33px;font-size:11px}
+.eh-manager-event-list{display:flex;flex-direction:column;gap:8px;margin:15px 0 20px}
+.eh-app button.eh-manager-event{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:6px;background:#fff!important;color:#253b59!important;border:1px solid #e1e6f2!important;margin:0!important;border-radius:11px!important;padding:13px!important;width:100%;min-height:65px}
+.eh-app button.eh-manager-event.is-selected{border-color:#738bd9!important;background:#eef3ff!important;box-shadow:0 0 0 1px #aac0ef}
+.eh-manager-event strong{font-size:13px;line-height:1.4}
+.eh-manager-event small{font-size:11px;color:#677c96;font-weight:550}
+.eh-manager-details{min-width:0;display:flex;flex-direction:column;gap:18px}
+.eh-manager-event-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:6px 0 20px;border-bottom:1px solid #e3e9f1}
+.eh-manager-caption{display:block;font-size:10px;font-weight:830;letter-spacing:1.3px;color:#3154b6;margin-bottom:9px}
+.eh-app section.eh-panel .eh-manager-event-header h3{font-size:clamp(21px,3vw,27px);letter-spacing:-.6px;color:#15294a;margin:0 0 9px}
+.eh-manager-event-header p{font-size:13px;color:#536983;margin:0;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.eh-app .eh-manager-event-header .eh-outline{white-space:nowrap}
+.eh-manager-section-title{display:flex;align-items:center;justify-content:space-between;padding-top:4px}
+.eh-app section.eh-panel .eh-manager-section-title h3{font-size:19px;margin:0}
+.eh-manager-activities{display:flex;flex-direction:column;gap:11px}
+.eh-manager-activity{border:1px solid #e0e8f4;border-radius:14px;padding:17px;background:#fcfdff;min-width:0}
+.eh-manager-activity-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.eh-manager-activity-top strong{color:#213554;font-size:14px;line-height:1.4;overflow-wrap:anywhere}
+.eh-manager-status{border-radius:100px;padding:6px 10px;font-size:10px;font-weight:800;white-space:nowrap}
+.eh-manager-status.is-published{background:#e2f6ed;color:#185f48}
+.eh-manager-status.is-pending{background:#fff2dc;color:#87500b}
+.eh-manager-activity>p{color:#5c7490;font-size:12px;margin:11px 0}
+.eh-manager-actions{display:flex;gap:8px;flex-wrap:wrap}
+.eh-app .eh-manager-actions button{margin:0!important;padding:8px 11px;min-height:35px}
+.eh-manager-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:15px;padding-top:15px;border-top:1px solid #e5eaf2}
+.eh-manager-metrics div{border-radius:10px;background:#eff4ff;padding:11px 8px;text-align:center}
+.eh-manager-metrics strong{display:block;color:#203c99;font-size:24px;line-height:1.2;font-weight:840}
+.eh-manager-metrics span{display:block;color:#55708f;font-size:10px;margin-top:5px}
+.eh-manager-metrics p{grid-column:1/-1;font-size:11px;color:#5a7085;margin:2px 0}
+.eh-manager-create{padding-top:16px;border-top:1px solid #dfe6f0}
+.eh-manager-create-activity{border:1px solid #dfe7f7;background:#fafcff;border-radius:14px;padding:20px;max-width:none;margin-top:9px}
+.eh-manager-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 16px}
+.eh-app .eh-manager-create input,.eh-app .eh-manager-create-activity input:not([type=checkbox]),.eh-app .eh-manager-edit input,.eh-app .eh-manager-rename input{width:100%;max-width:100%}
+.eh-app textarea{width:100%;max-width:100%;min-width:0;font:inherit;border:1px solid #cbd8e3;border-radius:9px;color:#1c3654;background:#fff;padding:12px;margin:5px 0 12px;resize:vertical;line-height:1.5}
+.eh-manager-check{display:flex!important;align-items:center;gap:6px;margin:10px 0!important}
+.eh-manager-check input{flex-shrink:0}
+.eh-manager-muted{color:#657a90;font-size:12px;line-height:1.6;margin:10px 0}
+.eh-manager-edit{background:#f5f8ff;border-radius:12px;padding:18px;max-width:none}
+.eh-manager-rename{background:#f7f9ff;padding:15px;border-radius:10px;margin-top:12px}
+.eh-organizer-feedback{border-radius:11px;padding:12px 15px;background:#e6f8ee;color:#20634d;font-size:13px}
+.eh-organizer-error{border-radius:11px;padding:12px 15px;background:#fff0ee;color:#9a383a;font-size:13px}
+.eh-app .eh-manager-layout button:disabled{opacity:.55;cursor:not-allowed;transform:none}
+@media(max-width:900px){
+  .eh-manager-layout{grid-template-columns:1fr;gap:18px}
+  .eh-manager-sidebar{padding:16px}
+  .eh-manager-event-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+}
+@media(max-width:470px){
+  .eh-manager-sidebar-header{align-items:flex-start}
+  .eh-manager-event-list,.eh-manager-fields{grid-template-columns:1fr}
+  .eh-manager-event-header{flex-direction:column}
+  .eh-manager-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .eh-manager-create-activity{padding:14px}
+}

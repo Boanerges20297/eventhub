@@ -10,6 +10,13 @@ export const routes=Object.freeze({
   login:'/auth/login',
   logout:'/auth/logout',
   events:'/eventos',
+  managedEvents:'/me/eventos',
+  managedEventActivities:id=>'/me/eventos/'+encodeURIComponent(id)+'/atividades',
+  editEvent:id=>'/me/eventos/'+encodeURIComponent(id),
+  editActivity:id=>'/me/atividades/'+encodeURIComponent(id),
+  activitySummary:id=>'/me/atividades/'+encodeURIComponent(id)+'/resumo',
+  synchronizeActivity:id=>'/atividades/'+encodeURIComponent(id)+'/sincronizar',
+
   eventActivities:eventId=>'/eventos/'+encodeURIComponent(eventId)+'/atividades',
   registrations:'/inscricoes',
   myRegistrations:(limit=50,offset=0)=>'/inscricoes?limit='+limit+'&offset='+offset,

@@ -34,6 +34,12 @@ function install(server){
   const events=process.env.EVENTS_URL||'http://events:3000';
   const registrations=process.env.REGISTRATIONS_URL||'http://registrations:8000';
   const routes=[
+    // Private organizer workspace; never expose unpublished events in the catalog.
+    ['GET', /^\/me\/eventos$/,events,'/internal/me/eventos','organizer'],
+    ['GET', /^\/me\/eventos\/([^/]+)\/atividades$/,events,m=>'/internal/me/eventos/'+m[1]+'/atividades','organizer'],
+    ['PATCH', /^\/me\/eventos\/([^/]+)$/,events,m=>'/internal/me/eventos/'+m[1],'organizer'],
+    ['PATCH', /^\/me\/atividades\/([^/]+)$/,events,m=>'/internal/me/atividades/'+m[1],'organizer'],
+    ['GET', /^\/me\/atividades\/([^/]+)\/resumo$/,events,m=>'/internal/me/atividades/'+m[1]+'/resumo','organizer'],
     ['GET', /^\/eventos$/,events,'/internal/eventos','public'],
     ['GET', /^\/eventos\/([^/]+)\/atividades$/,events,m=>'/internal/eventos/'+m[1]+'/atividades','public'],
     ['POST', /^\/eventos$/,events,'/internal/eventos','organizer'],

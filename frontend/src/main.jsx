@@ -4,6 +4,7 @@ import './theme.css';
 import EventHubMark from './EventHubMark.jsx';
 import {requestApi,routes} from './api.js';
 import ScreenHeading from './ScreenHeading.jsx';
+import OrganizerWorkspace from './OrganizerWorkspace.jsx';
 
 function App(){
   const [user,setUser]=useState(null);
@@ -15,11 +16,6 @@ function App(){
   const [events,setEvents]=useState([]);
   const [eventQuery,setEventQuery]=useState('');
   const [activities,setActivities]=useState({});
-  const [eventTitle,setEventTitle]=useState('');
-  const [newEventId,setNewEventId]=useState('');
-  const [activityTitle,setActivityTitle]=useState('');
-  const [capacity,setCapacity]=useState('2');
-  const [paid,setPaid]=useState(false);
   const [cpf,setCpf]=useState('');
   const [selected,setSelected]=useState('');
   const [myTickets,setMyTickets]=useState([]);
@@ -116,25 +112,6 @@ function App(){
   async function logout(){
     try{await api('/auth/logout','POST',{});}catch{}
     setUser(null);setCsrf('');setMyTickets([]);setMessage('Sessao encerrada.');
-  }
-  async function createEvent(evt){
-    evt.preventDefault();
-    try{
-      const r=await api('/eventos','POST',{titulo:eventTitle});
-      setNewEventId(r.evento_id);setMessage('Evento criado. Cadastre uma atividade.');
-    }catch(e){setMessage(e.message);}
-  }
-  async function createActivity(evt){
-    evt.preventDefault();
-    try{
-      const r=await api('/eventos/'+newEventId+'/atividades','POST',{
-        titulo:activityTitle,capacidade:Number(capacity),
-        gratuita:!paid,preco_centavos:paid?1500:0,
-        lista_espera_habilitada:true,prazo_reserva_min:30
-      });
-      setMessage(r.publicada?'Atividade publicada e sincronizada.':'Sincronizacao pendente. Tente novamente.');
-      if(r.publicada){await refreshEvents();await loadActivities(newEventId);}
-    }catch(e){setMessage(e.message);}
   }
   async function loadActivities(id){
     try{
@@ -290,23 +267,7 @@ function App(){
           </button>
         </form>
       </section>}
-      {organizer&&activeView==='organizacao'&&<section id="organizacao" className="eh-panel" style={box}>
-        <ScreenHeading eyebrow="ESPAÇO DO ORGANIZADOR" title="Tire seu evento do papel"
-          description="Um fluxo simples: primeiro o evento, depois as atividades e as vagas. Publicação e capacidade continuam sob controle dos serviços."/>
-        <div className="eh-step-label"><span>01</span> CRIAR EVENTO</div>
-        <form className="eh-editor-form" onSubmit={createEvent}>
-          <label>Titulo do evento<input style={input} value={eventTitle} onChange={e=>setEventTitle(e.target.value)} minLength="3" required/></label>
-          <button style={button}>Criar evento</button>
-        </form>
-        {newEventId&&<form className="eh-editor-form eh-step-two" onSubmit={createActivity} style={{marginTop:24,paddingTop:12,borderTop:'1px solid #ddd'}}>
-          <div className="eh-step-label"><span>02</span> ADICIONAR ATIVIDADE</div>
-          <p className="eh-context-note">Evento criado. Referência: <code>{newEventId.slice(0,8)}</code>. Agora configure a primeira atividade.</p>
-          <label>Titulo da atividade<input style={input} value={activityTitle} onChange={e=>setActivityTitle(e.target.value)} minLength="3" required/></label>
-          <label>Vagas<input style={input} type="number" min="0" max="100000" value={capacity} onChange={e=>setCapacity(e.target.value)} required/></label>
-          <label><input type="checkbox" checked={paid} onChange={e=>setPaid(e.target.checked)}/> Atividade paga (valor demonstrativo: R$ 15)</label>
-          <p><button style={button}>Criar e sincronizar atividade</button></p>
-        </form>}
-      </section>}
+      {organizer&&activeView==='organizacao'&&<OrganizerWorkspace user={user} csrf={csrf} onCatalogRefresh={refreshEvents}/>}
       {(!user||activeView==='eventos')&&<section id="eventos" className="eh-panel eh-catalog-panel" style={{...box,marginTop:18}}>
         <ScreenHeading eyebrow="CATÁLOGO EVENTHUB" title="Experiências para descobrir"
           description="Conheça os eventos publicados, escolha uma atividade e acompanhe sua participação."

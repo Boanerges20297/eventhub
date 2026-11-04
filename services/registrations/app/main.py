@@ -204,6 +204,51 @@ async def register(data: Register, request: Request):
     }
 
 
+
+@app.get("/internal/atividades/{atividade_id}/resumo")
+def activity_summary(atividade_id: str, request: Request):
+    """Aggregated status counts only. Caller must be an authorized backend.
+
+    Events verifies organization ownership before querying this internal endpoint.
+    No participant identifiers, CPF digests or individual tickets are returned.
+    """
+    caller(request)
+    if not atividade_id or len(atividade_id) > 64:
+        raise HTTPException(400, detail="ATIVIDADE_INVALIDA")
+    connection = connect_mysql()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT capacity FROM activity_capacity WHERE atividade_id=%s",
+                (atividade_id,)
+            )
+            settings = cursor.fetchone()
+            if not settings:
+                raise HTTPException(404, detail="ATIVIDADE_NAO_SINCRONIZADA")
+            cursor.execute(
+                "SELECT status,COUNT(*) AS quantidade FROM registrations "
+                "WHERE atividade_id=%s GROUP BY status",
+                (atividade_id,)
+            )
+            counts = {row["status"]: int(row["quantidade"])
+                      for row in cursor.fetchall()}
+    finally:
+        connection.close()
+    occupied = sum(counts.get(s, 0) for s in
+                   ("RESERVADO", "EM_VERIFICACAO", "CONFIRMADO"))
+    capacity_value = int(settings["capacity"])
+    return {
+        "capacidade": capacity_value,
+        "ocupadas": occupied,
+        "vagas_livres": max(0, capacity_value - occupied),
+        "confirmadas": counts.get("CONFIRMADO", 0),
+        "reservadas": counts.get("RESERVADO", 0),
+        "em_verificacao": counts.get("EM_VERIFICACAO", 0),
+        "em_fila": counts.get("EM_FILA", 0),
+        "em_processamento": counts.get("REGISTRADO", 0),
+        "total_registradas": sum(counts.values()),
+    }
+
 @app.get("/internal/inscricoes")
 def list_registrations(request: Request,
                        limit: int = Query(default=50, ge=1, le=100),
