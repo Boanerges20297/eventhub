@@ -25,6 +25,14 @@ node --test security.test.js rate-limit.test.js identity.test.js gateway.test.js
 
 No frontend, `npm run build`: **sucesso**. `git diff --check`: sem erros de whitespace (apenas avisos Git de conversão LF/CRLF).
 
+## Reforço contra condições de corrida (11/11/2026)
+
+A etapa de concorrência corrigiu um cenário em que uma verificação de senha bem-sucedida podia terminar **depois** da terceira falha concorrente. Antes, a abertura de sessão resetava os contadores sem conferir o bloqueio novamente.
+
+**Implementado no Identity:** atualizações condicionais de falhas (contador limitado a três, sem prolongar bloqueio), transação com `SELECT ... FOR UPDATE` da linha de `users` antes de criar sessão **ou desafio OTP**, rechecagem de `role`, `org_id` e `auth_version`, rechecagem do token de dispositivo confiável durante a transação e impedimento de emitir confiança quando a sessão foi negada. Atualizações de tentativas OTP só contam quando a linha do desafio ainda pode ser alterada.
+
+**Validação controlada:** requisições concorrentes de seis senhas erradas, cinco códigos OTP errados, corrida entre senha correta e terceiro erro, entre OTP correto e terceiro erro, criação de desafio concorrente com bloqueio e revogação de dispositivo durante autenticação. A suíte passou **20 execuções consecutivas** de `node --test identity.test.js` (20/20), além dos **8 testes Node** e `npm run build` (sucesso). Os testes de concorrência usam banco simulado com ordenação forçada; as semânticas reais de transação/índices/isolamento no MySQL InnoDB **ainda precisam de homologação em containers**.
+
 ## Pendências antes de homologação completa ou publicação
 
 1. **Integração real com MySQL e Caddy:** não executada. Em 11/11/2026 o STI01 estava sem Docker disponível e o EventHub não tinha arquivo `.env` operacional local. As baterias de identidade/gateway usaram banco e serviços simulados.

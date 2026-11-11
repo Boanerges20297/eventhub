@@ -20,7 +20,26 @@ test('identity: OTP, trusted devices, session revocation and three-attempt locko
     failed_attempts:0,locked_until:null
   };
   const sessions=new Map(), challenges=new Map(), devices=new Map();
+  let dbQueue=Promise.resolve(), pauseNextSession=null;
   const fake={
+    async getConnection(){
+      const previous=dbQueue;
+      let release;
+      const active=new Promise(resolve=>{release=resolve;});
+      dbQueue=previous.then(()=>active);
+      await previous;
+      if(pauseNextSession){
+        const pause=pauseNextSession;
+        pauseNextSession=null;
+        pause.enter();
+        await pause.wait;
+      }
+      return {
+        beginTransaction:async()=>{},commit:async()=>{},rollback:async()=>{},
+        execute:(...args)=>fake.execute(...args),
+        release
+      };
+    },
     async execute(sql,values=[]){
       const q=sql.replace(/\s+/g,' ').trim().toLowerCase();
       const res=items=>[items,[]];
@@ -36,9 +55,19 @@ test('identity: OTP, trusted devices, session revocation and three-attempt locko
           retry_seconds:Math.max(0,Math.ceil(((user.locked_until||0)-now())/1000))}]);
       }
       if(q.startsWith('update users set locked_until=if(')){
-        user.failed_attempts++;
+        if(user.failed_attempts>=3 || (user.locked_until && user.locked_until>now()))
+          return res({affectedRows:0});
+        user.failed_attempts=Math.min(3,user.failed_attempts+1);
         user.locked_until=user.failed_attempts>=3?now()+15*60*1000:null;
-        return res([{affectedRows:1}]);
+        return res({affectedRows:1});
+      }
+      if(q.startsWith('select greatest('))return res([{
+        retry_seconds:Math.max(0,Math.ceil(((user.locked_until||0)-now())/1000))
+      }]);
+      if(q.startsWith('select id,role,org_id,auth_version,')){
+        if(values[0]!==user.id)return res([]);
+        return res([{id:user.id,role:user.role,org_id:user.org_id,auth_version:user.auth_version,
+          is_locked:Boolean(user.locked_until && user.locked_until>now())}]);
       }
       if(q.startsWith('select failed_attempts, greatest('))return res([{
         failed_attempts:user.failed_attempts,
@@ -84,8 +113,9 @@ test('identity: OTP, trusted devices, session revocation and three-attempt locko
       }
       if(q.startsWith('update otp_challenges set attempts=')){
         const c=challenges.get(values[0]);
-        if(c && !c.consumed_at && c.attempts<3)c.attempts++;
-        return res([{affectedRows:1}]);
+        if(!c || c.consumed_at || c.attempts>=3 || c.expires_at<=now())return res({affectedRows:0});
+        c.attempts++;
+        return res({affectedRows:1});
       }
       if(q.startsWith('update otp_challenges set consumed_at=')){
         const c=challenges.get(values[0]);
@@ -202,5 +232,153 @@ test('identity: OTP, trusted devices, session revocation and three-attempt locko
     assert.equal((await post('/internal/auth/verify',{
       challenge_id:expired.id,code:afterUnlock.json().simulation_code
     })).statusCode,401);
+
+    // Six simultaneous wrong passwords must cause exactly one 15-minute ban.
+    user.failed_attempts=0;user.locked_until=null;
+    const concurrent=await Promise.all(Array.from({length:6},()=>post('/internal/auth/login',{
+      email:user.email,password:'wrong-pass',user_agent:'browser-A'
+    })));
+    assert.ok(concurrent.every(x=>[401,429].includes(x.statusCode)));
+    assert.equal(user.failed_attempts,3);
+    assert.ok(user.locked_until>now());
+    const firstLock=user.locked_until;
+    assert.equal((await post('/internal/auth/login',{
+      email:user.email,password:'wrong-pass',user_agent:'browser-A'
+    })).statusCode,429);
+    assert.equal(user.locked_until,firstLock,'locked requests cannot extend the ban');
+
+    // Concurrent wrong OTPs must not exceed three attempts or allow code replay.
+    user.locked_until=now()-1;
+    const next=await post('/internal/auth/login',{
+      email:user.email,password:'valid-password-1234',user_agent:'browser-A'
+    });
+    assert.equal(next.json().state,'otp_required');
+    const wrongOtp=next.json().simulation_code==='000000'?'999999':'000000';
+    const failures=await Promise.all(Array.from({length:5},()=>post('/internal/auth/verify',{
+      challenge_id:next.json().challenge_id,code:wrongOtp
+    })));
+    assert.ok(failures.every(x=>[401,429].includes(x.statusCode)));
+    assert.equal(challenges.get(next.json().challenge_id).attempts,3);
+    assert.equal(user.failed_attempts,3);
+    assert.equal((await post('/internal/auth/verify',{
+      challenge_id:next.json().challenge_id,code:next.json().simulation_code
+    })).statusCode,401);
+
+    // The password may have been verified before the third failure commits.
+    // Force the valid login to wait before its locked-row read.
+    user.locked_until=now()-1;
+    const start=await post('/internal/auth/login',{
+      email:user.email,password:'valid-password-1234',user_agent:'browser-A'
+    });
+    assert.equal(start.json().state,'otp_required');
+    const setup=await post('/internal/auth/verify',{
+      challenge_id:start.json().challenge_id,code:start.json().simulation_code,
+      trust_device:true,user_agent:'browser-A'
+    });
+    assert.equal(setup.statusCode,200);
+    const trustedToken=setup.json().device_token;
+    user.failed_attempts=2;user.locked_until=null;
+    let entered,release;
+    const atLock=new Promise(resolve=>entered=resolve);
+    const held=new Promise(resolve=>release=resolve);
+    pauseNextSession={enter:entered,wait:held};
+    const beforeSessions=sessions.size;
+    const pendingValid=post('/internal/auth/login',{
+      email:user.email,password:'valid-password-1234',
+      device_token:trustedToken,user_agent:'browser-A'
+    });
+    try{
+      await atLock;
+      const third=await post('/internal/auth/login',{
+        email:user.email,password:'wrong-pass',user_agent:'browser-A'
+      });
+      assert.equal(third.statusCode,429);
+    }finally{release();}
+    const denied=await pendingValid;
+    assert.equal(denied.statusCode,429);
+    assert.equal(sessions.size,beforeSessions,'no session created after competing lockout');
+    assert.equal(user.failed_attempts,3);
+
+    // A password validated before the third bad attempt cannot create
+    // a new OTP challenge after the account is locked.
+    user.failed_attempts=2;user.locked_until=null;
+    let challengeEntered,challengeRelease;
+    const atChallenge=new Promise(resolve=>challengeEntered=resolve);
+    const waitChallenge=new Promise(resolve=>challengeRelease=resolve);
+    pauseNextSession={enter:challengeEntered,wait:waitChallenge};
+    const previousChallenges=challenges.size;
+    const pendingChallenge=post('/internal/auth/login',{
+      email:user.email,password:'valid-password-1234',user_agent:'browser-X'
+    });
+    try{
+      await atChallenge;
+      const third=await post('/internal/auth/login',{
+        email:user.email,password:'wrong-pass',user_agent:'browser-A'
+      });
+      assert.equal(third.statusCode,429);
+    }finally{challengeRelease();}
+    assert.equal((await pendingChallenge).statusCode,429);
+    assert.equal(challenges.size,previousChallenges,'locked account cannot create OTP challenge');
+
+    // If a trusted device is revoked while a login is completing, its token
+    // must be rechecked under lock instead of relying on the initial SELECT.
+    user.locked_until=now()-1;
+    const deviceLogin=await post('/internal/auth/login',{
+      email:user.email,password:'valid-password-1234',user_agent:'browser-D'
+    });
+    assert.equal(deviceLogin.json().state,'otp_required');
+    const newDevice=await post('/internal/auth/verify',{
+      challenge_id:deviceLogin.json().challenge_id,code:deviceLogin.json().simulation_code,
+      trust_device:true,user_agent:'browser-D'
+    });
+    assert.equal(newDevice.statusCode,200);
+    const revocableToken=newDevice.json().device_token;
+    let revokeEntered,revokeRelease;
+    const atRevoke=new Promise(resolve=>revokeEntered=resolve);
+    const waitRevoke=new Promise(resolve=>revokeRelease=resolve);
+    pauseNextSession={enter:revokeEntered,wait:waitRevoke};
+    const sessionsBeforeRevoke=sessions.size;
+    const loginBeforeRevoke=post('/internal/auth/login',{
+      email:user.email,password:'valid-password-1234',
+      device_token:revocableToken,user_agent:'browser-D'
+    });
+    try{
+      await atRevoke;
+      assert.equal((await post('/internal/auth/device/revoke',{
+        sub:user.id,device_token:revocableToken
+      })).statusCode,200);
+    }finally{revokeRelease();}
+    const refused=await loginBeforeRevoke;
+    assert.equal(refused.statusCode,401);
+    assert.equal(sessions.size,sessionsBeforeRevoke,'revoked device cannot start a new session');
+
+    // Same race after a valid OTP: no session nor trusted-device grant is allowed.
+    user.locked_until=now()-1;
+    const otpStart=await post('/internal/auth/login',{
+      email:user.email,password:'valid-password-1234',user_agent:'browser-C'
+    });
+    assert.equal(otpStart.json().state,'otp_required');
+    user.failed_attempts=2;user.locked_until=null;
+    let otpEntered,otpRelease;
+    const otpAtLock=new Promise(resolve=>otpEntered=resolve);
+    const otpHeld=new Promise(resolve=>otpRelease=resolve);
+    pauseNextSession={enter:otpEntered,wait:otpHeld};
+    const beforeOtpSessions=sessions.size;
+    const beforeDevices=devices.size;
+    const pendingOtp=post('/internal/auth/verify',{
+      challenge_id:otpStart.json().challenge_id,code:otpStart.json().simulation_code,
+      trust_device:true,user_agent:'browser-C'
+    });
+    try{
+      await otpAtLock;
+      const third=await post('/internal/auth/login',{
+        email:user.email,password:'wrong-pass',user_agent:'browser-A'
+      });
+      assert.equal(third.statusCode,429);
+    }finally{otpRelease();}
+    const otpDenied=await pendingOtp;
+    assert.equal(otpDenied.statusCode,429);
+    assert.equal(sessions.size,beforeOtpSessions);
+    assert.equal(devices.size,beforeDevices,'OTP cannot grant trust after account lock');
   }finally{await app.close();}
 });

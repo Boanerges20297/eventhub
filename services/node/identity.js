@@ -27,9 +27,13 @@ async function bootstrap() {
     [crypto.randomUUID(), email, await hash(password,hashOptions), 'organizer', 'org-demo']);
 }
 async function failedAttempt(id) {
+  // InnoDB serializes concurrent UPDATEs on the same user row. Once locked,
+  // later requests must not extend the ban or reset/raise the counter.
   await db().execute(`UPDATE users SET
     locked_until=IF(failed_attempts+1>=3,DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 15 MINUTE),NULL),
-    failed_attempts=failed_attempts+1 WHERE id=?`, [id]);
+    failed_attempts=LEAST(3,failed_attempts+1)
+    WHERE id=? AND failed_attempts<3
+    AND (locked_until IS NULL OR locked_until<=UTC_TIMESTAMP(6))`, [id]);
   const [rows] = await db().execute(
     'SELECT failed_attempts, GREATEST(0,COALESCE(TIMESTAMPDIFF(SECOND,UTC_TIMESTAMP(6),locked_until),0)) AS retry_seconds FROM users WHERE id=?', [id]);
   return rows[0] || {failed_attempts:0,retry_seconds:0};
@@ -43,13 +47,104 @@ async function unlockedUser(email) {
     FROM users WHERE email=?`, [email]);
   return rows[0];
 }
-async function openSession(u) {
+async function openSession(u, trustedToken=null, agent='') {
+  // A prior password/OTP check can become stale while other logins fail.
+  // Lock the user row until the session insert + counter reset commit.
+  const conn = await db().getConnection();
   const sid = crypto.randomUUID();
-  await db().execute(`INSERT INTO sessions (id,user_id,auth_version,expires_at)
-    VALUES (?,?,?,DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 30 MINUTE))`,
-    [sid,u.id,u.auth_version]);
-  await db().execute('UPDATE users SET failed_attempts=0,locked_until=NULL WHERE id=?', [u.id]);
-  return {id:u.id, role:u.role, org_id:u.org_id, auth_version:u.auth_version, sid};
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute(`SELECT id,role,org_id,auth_version,
+      (locked_until>UTC_TIMESTAMP(6)) AS is_locked
+      FROM users WHERE id=? FOR UPDATE`, [u.id]);
+    const current = rows[0];
+    if (!current || current.is_locked || current.role!==u.role ||
+        (current.org_id||null)!==(u.org_id||null) ||
+        current.auth_version!==u.auth_version) {
+      const err = new Error('SESSAO_NEGADA_CONTA_BLOQUEADA_OU_ALTERADA');
+      err.code = 'SESSION_DENIED';
+      throw err;
+    }
+    if (trustedToken) {
+      // Device revocation must not race with session issuance.
+      const [devices] = await conn.execute(`SELECT id FROM trusted_devices
+        WHERE user_id=? AND token_hash=? AND agent_hash=? AND auth_version=?
+        AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP(6) FOR UPDATE`,
+        [u.id,digest(trustedToken),userAgentHash(agent),u.auth_version]);
+      if (!devices.length) {
+        const err=new Error('DISPOSITIVO_REVOGADO');
+        err.code='SESSION_DENIED';
+        throw err;
+      }
+    }
+    await conn.execute(`INSERT INTO sessions (id,user_id,auth_version,expires_at)
+      VALUES (?,?,?,DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 30 MINUTE))`,
+      [sid,u.id,u.auth_version]);
+    await conn.execute('UPDATE users SET failed_attempts=0,locked_until=NULL WHERE id=?', [u.id]);
+    await conn.commit();
+    return {id:u.id, role:u.role, org_id:u.org_id, auth_version:u.auth_version, sid};
+  } catch(err) {
+    await conn.rollback();
+    throw err;
+  } finally { conn.release(); }
+}
+async function sessionFor(reply, u, trustedToken=null, agent='') {
+  try { return await openSession(u,trustedToken,agent); }
+  catch(err) {
+    await rejectDenied(reply,u,err);
+    return null;
+  }
+}
+async function rejectDenied(reply,u,err) {
+  if (err.code !== 'SESSION_DENIED') throw err;
+  const [rows] = await db().execute(
+    'SELECT GREATEST(0,COALESCE(TIMESTAMPDIFF(SECOND,UTC_TIMESTAMP(6),locked_until),0)) AS retry_seconds FROM users WHERE id=?',
+    [u.id]);
+  const retry=Number(rows[0]?.retry_seconds||0);
+  if (retry>0) {
+    reply.header('Retry-After',String(retry));
+    reply.code(429).send({error:'LOGIN_BLOQUEADO_TEMPORARIAMENTE',retry_after_seconds:retry});
+  } else {
+    reply.code(401).send({error:'PERMISSAO_OU_SESSAO_ALTERADA_REFAZER_LOGIN'});
+  }
+}
+async function openChallenge(u) {
+  // Do not offer a new OTP challenge if another request has already locked
+  // the account while Argon2 was verifying the password.
+  const conn=await db().getConnection();
+  const challenge_id=crypto.randomUUID();
+  const code=String(crypto.randomInt(0,1000000)).padStart(6,'0');
+  try {
+    await conn.beginTransaction();
+    const [rows]=await conn.execute(`SELECT id,role,org_id,auth_version,
+      (locked_until>UTC_TIMESTAMP(6)) AS is_locked
+      FROM users WHERE id=? FOR UPDATE`,[u.id]);
+    const current=rows[0];
+    if (!current || current.is_locked || current.role!==u.role ||
+        (current.org_id||null)!==(u.org_id||null) ||
+        current.auth_version!==u.auth_version) {
+      const err=new Error('DESAFIO_NEGADO_CONTA_BLOQUEADA_OU_ALTERADA');
+      err.code='SESSION_DENIED';
+      throw err;
+    }
+    await conn.execute(`INSERT INTO otp_challenges
+      (id,user_id,code_mac,expires_at)
+      VALUES (?,?,?,DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 5 MINUTE))`,
+      [challenge_id,u.id,codeMac(challenge_id,code)]);
+    await conn.commit();
+    return {state:'otp_required',challenge_id,expires_in_seconds:300,
+      simulation:true,simulation_code:code};
+  } catch(err) {
+    await conn.rollback();
+    throw err;
+  } finally { conn.release(); }
+}
+async function challengeFor(reply,u) {
+  try { return await openChallenge(u); }
+  catch(err) {
+    await rejectDenied(reply,u,err);
+    return null;
+  }
 }
 async function trustedDevice(u, token, agent) {
   if (typeof token !== 'string' || !/^[a-zA-Z0-9_-]{43}$/.test(token)) return false;
@@ -106,16 +201,15 @@ function install(server) {
       }
       return reply.code(401).send({error:'CREDENCIAIS_INVALIDAS',remaining_attempts:3-failure.failed_attempts});
     }
-    if (await trustedDevice(u,device_token,user_agent))
-      return {state:'authenticated',user:await openSession(u),trusted_device:true};
+    if (await trustedDevice(u,device_token,user_agent)) {
+      const session = await sessionFor(reply,u,device_token,user_agent);
+      if (!session) return;
+      return {state:'authenticated',user:session,trusted_device:true};
+    }
     if (!simulated) return reply.code(503).send({error:'OTP_CANAL_NAO_CONFIGURADO'});
-    const challenge_id=crypto.randomUUID();
-    const code=String(crypto.randomInt(0,1000000)).padStart(6,'0');
-    await db().execute(`INSERT INTO otp_challenges
-      (id,user_id,code_mac,expires_at) VALUES (?,?,?,DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 5 MINUTE))`,
-      [challenge_id,u.id,codeMac(challenge_id,code)]);
-    return {state:'otp_required',challenge_id,expires_in_seconds:300,
-      simulation:true,simulation_code:code};
+    const challenge=await challengeFor(reply,u);
+    if (!challenge) return;
+    return challenge;
   });
 
   server.post('/internal/auth/verify',async(request,reply)=>{
@@ -132,8 +226,11 @@ function install(server) {
       return reply.code(401).send({error:'OTP_INVALIDO_OU_EXPIRADO'});
     const c=rows[0];
     if (!same(c.code_mac,codeMac(challenge_id,code))) {
-      await db().execute(`UPDATE otp_challenges SET attempts=attempts+1
-        WHERE id=? AND consumed_at IS NULL AND attempts<3`,[challenge_id]);
+      const [changed] = await db().execute(`UPDATE otp_challenges SET attempts=attempts+1
+        WHERE id=? AND consumed_at IS NULL AND expires_at>UTC_TIMESTAMP(6)
+        AND attempts<3`,[challenge_id]);
+      if (changed.affectedRows!==1)
+        return reply.code(401).send({error:'OTP_INVALIDO_OU_EXPIRADO'});
       const f=await failedAttempt(c.user_id);
       if(f.failed_attempts>=3) return reply.code(429).send({
         error:'LOGIN_BLOQUEADO_TEMPORARIAMENTE',retry_after_seconds:f.retry_seconds});
@@ -143,8 +240,10 @@ function install(server) {
       WHERE id=? AND consumed_at IS NULL AND expires_at>UTC_TIMESTAMP(6) AND attempts<3`,[challenge_id]);
     if(result.affectedRows!==1) return reply.code(401).send({error:'OTP_JA_UTILIZADO'});
     const u={id:c.user_id,role:c.role,org_id:c.org_id,auth_version:c.auth_version};
+    const session=await sessionFor(reply,u);
+    if (!session) return;
     const device_token=trust_device===true ? await issueDevice(u,user_agent) : null;
-    return {state:'authenticated',user:await openSession(u),device_token};
+    return {state:'authenticated',user:session,device_token};
   });
 
   server.post('/internal/auth/session',async(request,reply)=>{
