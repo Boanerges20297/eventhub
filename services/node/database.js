@@ -19,7 +19,43 @@ async function init(service) {
     await db().query(`CREATE TABLE IF NOT EXISTS users (
       id CHAR(36) PRIMARY KEY, email VARCHAR(255) NOT NULL UNIQUE,
       password_hash VARCHAR(255) NOT NULL, role VARCHAR(24) NOT NULL,
-      org_id VARCHAR(64), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      org_id VARCHAR(64), auth_version INT UNSIGNED NOT NULL DEFAULT 1,
+      failed_attempts INT UNSIGNED NOT NULL DEFAULT 0,
+      locked_until DATETIME(6) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB`);
+    // Existing test/development databases also get additive, non-destructive migrations.
+    const [existing] = await db().query(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users'");
+    const names = new Set(existing.map(row => row.COLUMN_NAME));
+    if (!names.has('auth_version')) await db().query(
+      'ALTER TABLE users ADD COLUMN auth_version INT UNSIGNED NOT NULL DEFAULT 1');
+    if (!names.has('failed_attempts')) await db().query(
+      'ALTER TABLE users ADD COLUMN failed_attempts INT UNSIGNED NOT NULL DEFAULT 0');
+    if (!names.has('locked_until')) await db().query(
+      'ALTER TABLE users ADD COLUMN locked_until DATETIME(6) NULL');
+    await db().query(`CREATE TABLE IF NOT EXISTS sessions (
+      id CHAR(36) PRIMARY KEY, user_id CHAR(36) NOT NULL,
+      auth_version INT UNSIGNED NOT NULL, expires_at DATETIME(6) NOT NULL,
+      revoked_at DATETIME(6) NULL, created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+      INDEX idx_session_user (user_id), INDEX idx_session_expiry (expires_at),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB`);
+    await db().query(`CREATE TABLE IF NOT EXISTS otp_challenges (
+      id CHAR(36) PRIMARY KEY, user_id CHAR(36) NOT NULL,
+      code_mac CHAR(64) NOT NULL, attempts INT UNSIGNED NOT NULL DEFAULT 0,
+      expires_at DATETIME(6) NOT NULL, consumed_at DATETIME(6) NULL,
+      created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+      INDEX idx_otp_user (user_id), INDEX idx_otp_expiry (expires_at),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB`);
+    await db().query(`CREATE TABLE IF NOT EXISTS trusted_devices (
+      id CHAR(36) PRIMARY KEY, user_id CHAR(36) NOT NULL,
+      token_hash CHAR(64) NOT NULL UNIQUE, agent_hash CHAR(64) NOT NULL,
+      auth_version INT UNSIGNED NOT NULL, expires_at DATETIME(6) NOT NULL,
+      revoked_at DATETIME(6) NULL, last_used_at DATETIME(6) NULL,
+      created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+      INDEX idx_device_user (user_id), INDEX idx_device_expiry (expires_at),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB`);
   }
   if (service === 'payments') {

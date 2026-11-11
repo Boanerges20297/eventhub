@@ -15,6 +15,7 @@ async function start(){
     const identity=require('./identity');
     await identity.bootstrap();
     identity.install(server);
+    identity.startCleanup();
   }else if(service==='events'){
     await init(service);
     require('./events').install(server);
@@ -22,6 +23,7 @@ async function start(){
     await init(service);
     require('./payments').install(server);
   }else if(service==='gateway'){
+    require('./rate-limit').install(server);
     require('./gateway').install(server);
   }
   await server.listen({port:Number(process.env.PORT||3000),host:'0.0.0.0'});

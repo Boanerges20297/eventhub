@@ -33,6 +33,8 @@ services:
       EVENTHUB_INTERNAL_SECRET: ${EVENTHUB_INTERNAL_SECRET:?configure .env}
       EVENTHUB_BOOTSTRAP_EMAIL: ${EVENTHUB_BOOTSTRAP_EMAIL:?configure .env}
       EVENTHUB_BOOTSTRAP_PASSWORD: ${EVENTHUB_BOOTSTRAP_PASSWORD:?configure .env}
+      EVENTHUB_OTP_SIMULATION: ${EVENTHUB_OTP_SIMULATION:-true}
+      NODE_ENV: ${EVENTHUB_NODE_ENV:-development}
       DB_HOST: mysql
       DB_NAME: eventhub_identity
       DB_USER: eventhub_identity
@@ -148,7 +150,7 @@ services:
       PORT: "3000"
       EVENTHUB_INTERNAL_SECRET: ${EVENTHUB_INTERNAL_SECRET:?configure .env}
       EVENTHUB_JWT_SECRET: ${EVENTHUB_JWT_SECRET:?configure .env}
-      EVENTHUB_COOKIE_SECURE: "false"
+      EVENTHUB_COOKIE_SECURE: ${EVENTHUB_COOKIE_SECURE:-false}
       IDENTITY_URL: http://identity:3000
       EVENTS_URL: http://events:3000
       PAYMENTS_URL: http://payments:3000

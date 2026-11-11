@@ -29,6 +29,21 @@ async function requestTo(url,method,body,principal,timeoutMs=5000){
     return {status:r.status,data};
   } catch {return {status:503,data:{error:'SERVICO_INDISPONIVEL'}};}
 }
+function sessionCookie(value,age){
+  return 'eh_session='+value+'; Path=/api; Max-Age='+age+'; HttpOnly; SameSite=Strict'+(secure?'; Secure':'');
+}
+function deviceCookie(value,age){
+  return 'eh_device='+value+'; Path=/api; Max-Age='+age+'; HttpOnly; SameSite=Strict'+(secure?'; Secure':'');
+}
+function authenticated(reply,data){
+  const token=jwt(data.user);
+  reply.header('set-cookie',data.device_token
+    ? [sessionCookie(token,1800),deviceCookie(data.device_token,2592000)]
+    : sessionCookie(token,1800));
+  return {user:{id:data.user.id,role:data.user.role,org_id:data.user.org_id},
+    csrf:csrf(token),expira_em_segundos:1800,
+    trusted_device:data.trusted_device===true||Boolean(data.device_token)};
+}
 function install(server){
   const identity=process.env.IDENTITY_URL||'http://identity:3000';
   const events=process.env.EVENTS_URL||'http://events:3000';
@@ -65,27 +80,65 @@ function install(server){
       return reply.code(r.status).send(r.data);
     }
     if(method==='POST' && path==='/auth/login'){
-      const r=await requestTo(identity+'/internal/auth/login','POST',request.body,null);
+      const r=await requestTo(identity+'/internal/auth/login','POST',{
+        ...(request.body||{}),device_token:cookie(request,'eh_device'),
+        user_agent:request.headers['user-agent']||''},null);
       if(r.status!==200)return reply.code(r.status).send(r.data);
-      const token=jwt(r.data.user);
-      reply.header('set-cookie',
-        'eh_session='+token+'; Path=/api; Max-Age=1800; HttpOnly; SameSite=Strict'+(secure?'; Secure':''));
-      return {user:{id:r.data.user.id,role:r.data.user.role,org_id:r.data.user.org_id},
-        csrf:csrf(token),expira_em_segundos:1800};
+      if(r.data.state==='otp_required')return {
+        otp_required:true,challenge_id:r.data.challenge_id,
+        expires_in_seconds:r.data.expires_in_seconds,
+        simulation:r.data.simulation===true,simulation_code:r.data.simulation_code
+      };
+      if(r.data.state!=='authenticated'||!r.data.user)return reply.code(502).send({error:'IDENTIDADE_INVALIDA'});
+      return authenticated(reply,r.data);
+    }
+    if(method==='POST' && path==='/auth/verify'){
+      const r=await requestTo(identity+'/internal/auth/verify','POST',{
+        ...(request.body||{}),user_agent:request.headers['user-agent']||''},null);
+      if(r.status!==200)return reply.code(r.status).send(r.data);
+      if(r.data.state!=='authenticated'||!r.data.user)return reply.code(502).send({error:'IDENTIDADE_INVALIDA'});
+      return authenticated(reply,r.data);
     }
     const token=cookie(request,'eh_session');
-    let p=null;
-    try{if(token)p=verify(token);}catch{}
+    let checked=false, p=null, authFailure=401;
+    async function principal(){
+      if(checked)return p;
+      checked=true;
+      let claims;
+      try{claims=verify(token);}catch{return null;}
+      const r=await requestTo(identity+'/internal/auth/session','POST',{
+        sub:claims.sub,sid:claims.sid,role:claims.role,org_id:claims.org_id,ver:claims.ver
+      },null,3000);
+      if(r.status===200 && r.data.valid===true){p=claims;return p;}
+      if(r.status===503)authFailure=503;
+      else reply.header('set-cookie',sessionCookie('',0));
+      return null;
+    }
     if(method==='GET' && path==='/auth/me'){
-      if(!p)return reply.code(401).send({error:'NAO_AUTENTICADO'});
+      const principalData=await principal();
+      if(!principalData)return reply.code(authFailure).send({error:authFailure===503?'IDENTIDADE_INDISPONIVEL':'NAO_AUTENTICADO'});
       return {user:{id:p.sub,role:p.role,org_id:p.org_id},csrf:csrf(token)};
     }
-    if(method==='POST'&&path==='/auth/logout'){
-      if(!p)return reply.code(401).send({error:'NAO_AUTENTICADO'});
+    if(method==='POST' && path==='/auth/logout'){
+      const principalData=await principal();
+      if(!principalData)return reply.code(authFailure).send({error:'NAO_AUTENTICADO'});
       if(!same(request.headers['x-csrf-token'],csrf(token)))
         return reply.code(403).send({error:'CSRF_INVALIDO'});
-      reply.header('set-cookie','eh_session=; Path=/api; Max-Age=0; HttpOnly; SameSite=Strict'+(secure?'; Secure':''));
+      const r=await requestTo(identity+'/internal/auth/logout','POST',{sub:p.sub,sid:p.sid},null);
+      reply.header('set-cookie',sessionCookie('',0));
+      if(r.status!==200)return reply.code(r.status).send({error:'REVOGACAO_NAO_CONFIRMADA'});
       return {status:'SAIU'};
+    }
+    if(method==='POST' && path==='/auth/device/revoke'){
+      const principalData=await principal();
+      if(!principalData)return reply.code(authFailure).send({error:'NAO_AUTENTICADO'});
+      if(!same(request.headers['x-csrf-token'],csrf(token)))
+        return reply.code(403).send({error:'CSRF_INVALIDO'});
+      const r=await requestTo(identity+'/internal/auth/device/revoke','POST',{
+        sub:p.sub,device_token:cookie(request,'eh_device')},null);
+      if(r.status!==200)return reply.code(r.status).send(r.data);
+      reply.header('set-cookie',deviceCookie('',0));
+      return {status:'DISPOSITIVO_REVOGADO'};
     }
     if(path==='/health' && method==='GET')
       return {status:'up',service:'gateway',implementation:'api-mvp',business_ready:false};
@@ -93,7 +146,8 @@ function install(server){
       if(method!==verb)continue;
       const match=path.match(re);
       if(!match)continue;
-      if(access!=='public'&&!p)return reply.code(401).send({error:'NAO_AUTENTICADO'});
+      if(access!=='public' && !(await principal()))
+        return reply.code(authFailure).send({error:authFailure===503?'IDENTIDADE_INDISPONIVEL':'NAO_AUTENTICADO'});
       if(access==='organizer' && !['organizer','admin'].includes(p.role))
         return reply.code(403).send({error:'SEM_PERMISSAO'});
       if(access==='participant' && p.role!=='participant' && p.role!=='admin')

@@ -12,6 +12,10 @@ function App(){
   const [mode,setMode]=useState('login');
   const [email,setEmail]=useState('');
   const [password,setPassword]=useState('');
+  const [otpChallenge,setOtpChallenge]=useState('');
+  const [otpCode,setOtpCode]=useState('');
+  const [simulationCode,setSimulationCode]=useState('');
+  const [trustDevice,setTrustDevice]=useState(false);
   const [message,setMessage]=useState('');
   const [events,setEvents]=useState([]);
   const [eventQuery,setEventQuery]=useState('');
@@ -103,15 +107,42 @@ function App(){
         setMessage('Conta criada. Entre com suas credenciais.');
         return;
       }
+      if(mode==='verify'){
+        const data=await api('/auth/verify','POST',{
+          challenge_id:otpChallenge,code:otpCode,trust_device:trustDevice});
+        setUser(data.user);setCsrf(data.csrf);
+        setOtpCode('');setSimulationCode('');setOtpChallenge('');setTrustDevice(false);setMode('login');
+        setMessage('Acesso confirmado com segundo fator.');
+        await refreshEvents();
+        return;
+      }
       const data=await api('/auth/login','POST',{email,password});
-      setUser(data.user);setCsrf(data.csrf);setPassword('');
-      setMessage('Sessao autenticada.');
+      setPassword('');
+      if(data.otp_required){
+        setOtpChallenge(data.challenge_id);setOtpCode('');setTrustDevice(false);
+        setSimulationCode(data.simulation===true && /^[0-9]{6}$/.test(data.simulation_code||'') ? data.simulation_code : '');
+        setMode('verify');
+        setMessage(data.simulation && data.simulation_code
+          ? 'Teste local: use Preencher codigo de teste e depois Confirmar OTP.'
+          : 'Informe o codigo de verificacao.');
+        return;
+      }
+      setUser(data.user);setCsrf(data.csrf);
+      setMessage('Acesso realizado em dispositivo confiavel.');
       await refreshEvents();
     }catch(e){setMessage(e.message);}
   }
   async function logout(){
-    try{await api('/auth/logout','POST',{});}catch{}
-    setUser(null);setCsrf('');setMyTickets([]);setMessage('Sessao encerrada.');
+    try{
+      await api('/auth/logout','POST',{});
+      setUser(null);setCsrf('');setMyTickets([]);setMessage('Sessao revogada e encerrada.');
+    }catch(e){setMessage('Nao foi possivel confirmar a revogacao: '+e.message);}
+  }
+  async function forgetDevice(){
+    try{
+      await api('/auth/device/revoke','POST',{});
+      setMessage('Este dispositivo nao e mais confiavel. Um novo login exigira OTP.');
+    }catch(e){setMessage(e.message);}
   }
   async function loadActivities(id){
     try{
@@ -230,7 +261,7 @@ function App(){
       <div className="eh-main">
         <header className={'eh-topbar'+(user?' eh-auth-topbar':'')}>
           <div><span className="eh-heading-overline">EVENTHUB / WORKSPACE</span><h1>{user?'Painel de eventos':'EventHub'}</h1><p>Plataforma de eventos, programacao e inscricoes</p></div>
-          {user&&<button className="eh-outline" style={button} onClick={logout}>Sair</button>}
+          {user&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="eh-outline" style={button} onClick={forgetDevice}>Esquecer aparelho</button><button className="eh-outline" style={button} onClick={logout}>Sair</button></div>}
         </header>
         <div className="eh-page" id="visao-geral">
           {user&&activeView==='visao-geral'&&<section className="eh-feature" aria-label="Destaque">
@@ -256,15 +287,40 @@ function App(){
           {message&&<p className="eh-notice" role="status" style={{...box,background:'#eaf1f6'}}>{message}</p>}
       {!user&&<section className="eh-panel" style={{...box,maxWidth:460,margin:'0 auto'}}>
         <ScreenHeading eyebrow="ACESSO EVENTHUB"
-          title={mode==='login'?'Entre no seu espaço':'Sua jornada começa aqui'}
-          description={mode==='login'?'Continue de onde parou, com eventos e inscrições vinculados à sua conta.':'Crie sua conta para participar das próximas experiências.'}/>
+          title={mode==='verify'?'Confirme seu acesso':mode==='login'?'Entre no seu espaço':'Sua jornada começa aqui'}
+          description={mode==='verify'?'Confirme o codigo temporario para continuar. No ambiente local voce pode preencher o codigo de teste automaticamente.':mode==='login'?'Continue de onde parou, com eventos e inscrições vinculados à sua conta.':'Crie sua conta para participar das próximas experiências.'}/>
         <form className="eh-editor-form" onSubmit={login}>
-          <label>E-mail<input style={input} type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label>
-          <label>Senha (minimo 12 caracteres)<input style={input} type="password" value={password} onChange={e=>setPassword(e.target.value)} required minLength="12"/></label>
-          <button style={button} type="submit">{mode==='login'?'Entrar':'Cadastrar'}</button>
-          <button style={{...button,background:'#5e7080'}} type="button" onClick={()=>setMode(mode==='login'?'register':'login')}>
-            {mode==='login'?'Criar conta':'Voltar ao login'}
-          </button>
+          {mode==='verify'?<>
+            <label>Codigo de verificacao (6 digitos)
+              <input style={input} inputMode="numeric" autoComplete="one-time-code"
+                pattern="[0-9]{6}" maxLength={6} value={otpCode}
+                onChange={e=>setOtpCode(e.target.value.replace(/[^0-9]/g,'').slice(0,6))} required/>
+            </label>
+            <label style={{display:'flex',alignItems:'center',gap:10}}>
+              <input type="checkbox" checked={trustDevice}
+                onChange={e=>setTrustDevice(e.target.checked)}/>
+              Confiar neste aparelho por 30 dias
+            </label>
+            <button style={button} type="submit">Confirmar OTP</button>
+            {simulationCode && <button style={{...button,background:'#5e7080'}}
+              type="button" onClick={()=>setOtpCode(simulationCode)}>
+              Preencher codigo de teste
+            </button>}
+            <button style={{...button,background:'#5e7080'}} type="button"
+              onClick={()=>{setOtpChallenge('');setOtpCode('');setSimulationCode('');setMode('login');setMessage('');}}>Cancelar</button>
+          </>:<>
+            <label>E-mail<input style={input} type="email" autoComplete="username"
+              value={email} onChange={e=>setEmail(e.target.value)} required/></label>
+            <label>Senha (minimo 12 caracteres)<input style={input} type="password"
+              autoComplete={mode==='register'?'new-password':'current-password'}
+              value={password} onChange={e=>setPassword(e.target.value)}
+              required minLength={mode==='register'?12:1}/></label>
+            <button style={button} type="submit">{mode==='login'?'Entrar':'Cadastrar'}</button>
+            <button style={{...button,background:'#5e7080'}} type="button"
+              onClick={()=>setMode(mode==='login'?'register':'login')}>
+              {mode==='login'?'Criar conta':'Voltar ao login'}
+            </button>
+          </>}
         </form>
       </section>}
       {organizer&&activeView==='organizacao'&&<OrganizerWorkspace user={user} csrf={csrf} onCatalogRefresh={refreshEvents}/>}

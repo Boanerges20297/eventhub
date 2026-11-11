@@ -8,6 +8,8 @@ export const routes=Object.freeze({
   session:'/auth/me',
   register:'/auth/register',
   login:'/auth/login',
+  verifyOtp:'/auth/verify',
+  revokeDevice:'/auth/device/revoke',
   logout:'/auth/logout',
   events:'/eventos',
   managedEvents:'/me/eventos',

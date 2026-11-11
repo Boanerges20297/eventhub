@@ -329,3 +329,6 @@ Get-Content -Raw .\scripts\test_notifications_e2e.js | docker compose exec -T id
 | Operação e teste | [Execução local](EXECUCAO_LOCAL.md), [Checkpoint 03/11](CHECKPOINT_2026-11-03.md), [Checkpoint 04/11](CHECKPOINT_2026-11-04.md) |
 
 **Conclusão:** a arquitetura local tem superfície publicada mínima, controles de sessão e consistência demonstrados em cenários específicos. **Não está homologada para produção.** Toda mudança de porta, protocolo, fronteira, identidade de serviço, política de acesso ou infraestrutura requer atualização desta matriz e nova validação.
+
+## Implementacao e validacao de seguranca (11/11/2026)
+Detalhes de autenticacao, limites, testes e pendencias: [Checkpoint de seguranca de 11/11/2026](CHECKPOINT_SECURITY_2026-11-11.md).

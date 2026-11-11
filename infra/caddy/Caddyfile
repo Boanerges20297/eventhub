@@ -1,7 +1,9 @@
 :80 {
   encode gzip zstd
   handle_path /api/* {
-    reverse_proxy gateway:3000
+    reverse_proxy gateway:3000 {
+      header_up X-Real-IP {remote_host}
+    }
   }
   handle {
     root * /srv
