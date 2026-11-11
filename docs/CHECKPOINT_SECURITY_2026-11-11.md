@@ -31,14 +31,31 @@ A etapa de concorrência corrigiu um cenário em que uma verificação de senha 
 
 **Implementado no Identity:** atualizações condicionais de falhas (contador limitado a três, sem prolongar bloqueio), transação com `SELECT ... FOR UPDATE` da linha de `users` antes de criar sessão **ou desafio OTP**, rechecagem de `role`, `org_id` e `auth_version`, rechecagem do token de dispositivo confiável durante a transação e impedimento de emitir confiança quando a sessão foi negada. Atualizações de tentativas OTP só contam quando a linha do desafio ainda pode ser alterada.
 
-**Validação controlada:** requisições concorrentes de seis senhas erradas, cinco códigos OTP errados, corrida entre senha correta e terceiro erro, entre OTP correto e terceiro erro, criação de desafio concorrente com bloqueio e revogação de dispositivo durante autenticação. A suíte passou **20 execuções consecutivas** de `node --test identity.test.js` (20/20), além dos **8 testes Node** e `npm run build` (sucesso). Os testes de concorrência usam banco simulado com ordenação forçada; as semânticas reais de transação/índices/isolamento no MySQL InnoDB **ainda precisam de homologação em containers**.
+**Validação controlada:** requisições concorrentes de seis senhas erradas, cinco códigos OTP errados, corrida entre senha correta e terceiro erro, entre OTP correto e terceiro erro, criação de desafio concorrente com bloqueio e revogação de dispositivo durante autenticação. A suíte passou **20 execuções consecutivas** de `node --test identity.test.js` (20/20), além dos **8 testes Node** e `npm run build` (sucesso). Os testes anteriores de concorrência usam banco simulado com ordenação forçada. Uma bateria adicional com **MySQL 8.4.13/InnoDB real no STI01** foi executada com sucesso, conforme a seção seguinte. A integração completa entre serviços/containers permanece pendente.
+
+## Integração com MySQL real no STI01 (11/11/2026)
+
+**Executado com sucesso, sem Docker/notebook**, usando MySQL Community Server 8.4.13 e InnoDB, em instância temporária do EventHub, ligada somente ao `127.0.0.1:33307`, independente do MySQL em `127.0.0.1:3306`.
+
+O arquivo versionado `services/node/identity.mysql.test.js` é opt-in (`EVENTHUB_TEST_MYSQL=1`). Confere versão, porta e bind antes de criar seu próprio schema `eventhub_test_auth_<sufixo>`, inicializa as tabelas reais e descarta exclusivamente esse schema ao terminar. O `database.js` aceita `DB_PORT`, com 3306 como padrão para preservar os demais ambientes.
+
+Comando executado pelo NEXO no STI01, após autorização expressa do proprietário:
+
+```powershell
+$env:EVENTHUB_TEST_MYSQL='1'
+node --test identity.mysql.test.js
+```
+
+**Resultado verificado: 7/7 testes aprovados (6 subtestes + agrupamento), zero falhas, saída 0.** Casos: tabelas/índices InnoDB, seis senhas erradas simultâneas (bloqueio único), cinco OTPs errados simultâneos, consumo único de código com duas requisições corretas concorrentes, dispositivo confiável/revogação, mudança de papel invalidando sessão, bloqueio concorrente com `COMMIT`, e recuperação com `ROLLBACK`. O teste usa conexões MySQL independentes e trava real de linha, e faz limpeza do schema em `finally`.
+
+**Limites:** o teste não equivale à integração HTTP entre todos os microsserviços, Caddy, MySQL em containers ou validação de implantação; o segundo fator permanece simulado. A instância de homologação foi destinada exclusivamente a testes locais e não deve ser publicada na rede.
 
 ## Pendências antes de homologação completa ou publicação
 
-1. **Integração real com MySQL e Caddy:** não executada. Em 11/11/2026 o STI01 estava sem Docker disponível e o EventHub não tinha arquivo `.env` operacional local. As baterias de identidade/gateway usaram banco e serviços simulados.
+1. **Integração HTTP entre serviços e Caddy:** não executada. O STI01 não tem Docker, e o EventHub não tem arquivo `.env` operacional local. A lógica de Identity foi validada em MySQL/InnoDB real no STI; o Gateway e os fluxos interserviços ainda dependem de testes integrados.
 2. **OTP real em produção:** selecionar e configurar provedor de envio de segundo fator, códigos de recuperação e fluxo de revogação/reenrolamento. A simulação não é um mecanismo de MFA de produção; nunca expor `simulation_code` em produção.
 3. **DDoS volumétrico:** o rate limiting em memória é proteção de camada de aplicação, não defesa contra saturação de rede. Para implantação pública, usar borda/WAF/CDN, limites compartilhados (ex.: Redis) se houver múltiplos gateways, monitoramento/alertas e configuração explícita de proxies confiáveis. Se houver outro proxy antes do Caddy, revisar como recuperar o IP verdadeiro sem confiar em cabeçalhos do cliente.
-4. **Validação fim a fim:** verificar testes com containers reais, migração MySQL e fluxos de dois usuários/perfis, mudança de permissão, bloqueio concorrente, revogação, CSRF, expiração e regressão dos demais serviços.
+4. **Validação fim a fim:** verificar fluxos HTTP entre serviços, Caddy e containers reais, migração de instâncias existentes, CSRF, expiração, múltiplos usuários/perfis e regressões dos demais serviços. Bloqueio concorrente, revogação, sessão e permissões já foram exercitados no Identity/InnoDB real, mas não na topologia completa.
 5. **Rotação de chaves e gestão de sessões:** manter segredos fora do Git; implantar política de rotação, auditoria de login e rotina de invalidar dispositivos após mudança sensível de credenciais/role.
 
 ## Configuração local

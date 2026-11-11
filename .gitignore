@@ -26,3 +26,6 @@ coverage/
 /checkpoint-transfer.base64.txt
 /checkpoint-transfer.bundle
 /.cdp-manager-*/
+
+# Temporary local MySQL test data (never commit)
+/.runtime/
