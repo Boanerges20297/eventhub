@@ -21,7 +21,11 @@ class Client{
     return {status:r.status,body:await r.json().catch(()=>({}))};
   }
   async login(email,password){
-    const r=await this.call('POST','/auth/login',{email,password});
+    let r=await this.call('POST','/auth/login',{email,password});
+    if (r.body?.otp_required === true) {
+      assert.equal(r.body.simulation, true, "E2E requires simulated OTP in local development");
+      r = await this.call("POST","/auth/verify",{challenge_id:r.body.challenge_id,code:r.body.simulation_code});
+    }
     assert.equal(r.status,200,JSON.stringify(r.body));
     this.csrf=r.body.csrf;
   }
