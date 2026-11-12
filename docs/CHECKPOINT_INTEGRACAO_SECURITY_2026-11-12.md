@@ -41,12 +41,31 @@ O teste `scripts/test_security_integration_e2e.js` foi executado via Node.js **d
 
 **Após a reconstrução**, os sete roteiros convencionais com `Client.login` foram adaptados para realizar senha + verificação OTP de desenvolvimento, sem retirar os controles de segurança; passaram na análise de sintaxe. A tentativa de repetir `test_http_e2e.js` retornou **HTTP 429 LIMITE_DE_REQUISICOES** durante o cadastro sintético, pois o Gateway já havia contabilizado os cadastros recentes do teste anterior no mesmo IP (limite de quatro cadastros por dez minutos). **Não se deve marcar essa regressão como aprovada nem como defeito de regra de negócio.** A reconstrução aprovada do Gateway (para limpar exclusivamente seus limites em memória) foi solicitada ao operador e depende de nova autorização NEXO, ou da expiração natural da janela; os limites não foram desabilitados.
 
-Assim, a **autenticação atualizada já possui evidência integrada real de 12 verificações**, mas a reexecução integral dos cenários de negócio com o novo fluxo OTP permanece pendente. As baterias de contingência com desligamento do MySQL não foram repetidas no ambiente principal nesta etapa.
+## Revalidação dos fluxos de negócio com OTP e rate limiting ativos
+
+Após a correção do privilégio de chave estrangeira, os nove containers do projeto `eventhub` permaneceram operacionais. O Gateway foi reiniciado de modo controlado e os roteiros existentes foram adaptados ao fluxo de autenticação em duas etapas, preservando CSRF e as regras de autorização.
+
+Resultados observados com execução real no Docker Compose principal, todos com código de saída zero:
+
+| Roteiro | Evidência | Resultado |
+|---|---|---|
+| `test_http_e2e.js` | `HTTP_E2E_OK`: autenticação, CSRF, RBAC, titularidade, FIFO e promoção | APROVADO |
+| `test_payments_e2e.js` | `PAYMENTS_E2E_OK`: aprovação/recusa/indeterminação, idempotência, titularidade | APROVADO |
+| `test_notifications_e2e.js` | `NOTIFICATIONS_E2E_OK`: reserva, confirmação, isolamento, deduplicação | APROVADO |
+| `test_organizer_workspace_e2e.js` | `ORGANIZER_WORKSPACE_E2E_OK`: rascunho, edição, publicação, ocupação e acesso | APROVADO |
+| `test_organizer_registrations_e2e.js` | `ORGANIZER_REGISTRATIONS_E2E_OK`: 4 inscrições, 2 confirmadas, 2 em espera, paginação, filtros, privacidade e negativas de permissão | APROVADO |
+| `test_api_concurrency_mfa_e2e.js` | `API_CONCURRENCY_MFA_E2E_OK`: 40 submissões para 12 vagas; 12 confirmadas, 28 em fila; tickets únicos, FIFO, idempotência, isolamento; MySQL auditado; duração de 13,9 s | APROVADO |
+
+**Isolamento dos clientes de teste:** alguns roteiros falharam inicialmente com HTTP 429 porque o Docker reaproveitava IPs de containers temporários dentro da janela de dez minutos (quatro cadastros por IP). O procedimento foi corrigido atribuindo IPs privados exclusivos e distintos aos clientes sintéticos, sem alterar os limites do Gateway, e os roteiros foram reexecutados e aprovados.
+
+**Metodologia da carga de 40 participantes:** 40 identidades e 40 sessões de desenvolvimento foram semeadas diretamente no banco isolado do serviço Identity, usando credenciais de teste e JWTs válidos vinculados a sessões persistidas. Isso elimina somente o cadastro/login em massa do escopo do ensaio, não a revalidação de sessão, CSRF, titularidade nem o fluxo HTTP de inscrição. As 40 solicitações passaram pelo Gateway real, e os 40 estados finais foram auditados diretamente no MySQL/InnoDB de Inscrições. Quatro leituras HTTP amostrais verificaram visibilidade e pertencimento. As sessões sintéticas foram revogadas ao final; os registros de testes foram preservados para auditoria. **Esse cenário não demonstra 40 logins OTP simultâneos**, propriedade distinta da concorrência na concessão de vagas.
+
+**Conclusão da etapa:** seis cenários de negócio da versão atualizada foram aprovados, além das 12 verificações E2E de segurança e oito testes Node. A contingência com desligamento real do MySQL e a falha entre commit e confirmação não foram repetidas nesta etapa; os resultados de contingência de 03/11 permanecem a evidência correspondente. A implantação pública continua fora do escopo experimental.
 
 ## Restrições e pendências
 
 - A simulação OTP não representa entrega real por TOTP, e-mail ou SMS e não deve ser ativada em produção pública.
 - A borda permanece HTTP local; não foram medidos DDoS volumétrico, WAF, SMTP real ou adquirente financeira.
-- A correção do privilégio `REFERENCES` deve ser incluída no registro de configuração e no Git.
-- Os roteiros regressivos adaptados ao OTP exigem reteste completo sob um orçamento de requisições compatível com o rate limiting.
+- O privilégio `REFERENCES` foi corrigido no banco de laboratório e no script de inicialização versionado (commit `0153623`), preservando segregação por banco.
+- Os seis principais roteiros de negócio passaram com OTP simulado e rate limiting ativos; os ensaios de contingência destrutiva permanecem evidências históricas não repetidas nesta rodada.
 - Evidência de execução deste checkpoint é distinta da homologação para publicação pública.
