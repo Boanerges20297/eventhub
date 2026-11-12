@@ -130,6 +130,27 @@ function install(server){
     }catch{return reply.code(503).send({error:'RESUMO_INDISPONIVEL'});}
   });
 
+  server.get('/internal/me/atividades/:id/inscricoes',async(req,reply)=>{
+    const p=authorized(req,reply,['organizer','admin']);if(!p)return;
+    const row=await activityById(req.params.id);
+    if(!row||!isOwner(p,row.org_id))
+      return reply.code(404).send({error:'ATIVIDADE_NAO_ENCONTRADA'});
+    if(row.capacity_state!=='CONCLUIDA')
+      return reply.code(409).send({error:'ATIVIDADE_NAO_PUBLICADA'});
+    const query=new URLSearchParams();
+    for(const key of ['limit','offset','estado']){
+      if(req.query?.[key]!==undefined)query.set(key,String(req.query[key]));
+    }
+    try{
+      const r=await fetch((process.env.REGISTRATIONS_URL||'http://registrations:8000')
+        +'/internal/atividades/'+encodeURIComponent(row.id)+'/inscricoes'
+        +(query.size?'?'+query.toString():''),{
+          headers:asHeaders(null),signal:AbortSignal.timeout(5000)});
+      const data=await r.json().catch(()=>({error:'RESPOSTA_INVALIDA'}));
+      if(!r.ok)return reply.code(r.status).send(data);
+      return data;
+    }catch{return reply.code(503).send({error:'INSCRICOES_INDISPONIVEIS'});}
+  });
   server.get('/internal/eventos',async(request,reply)=>{
     try{internal(request);}catch{return reply.code(403).send({error:'SERVICO_NAO_AUTORIZADO'});}
     const [rows]=await db().query(

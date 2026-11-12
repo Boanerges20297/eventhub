@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {requestApi, routes} from './api.js';
 import ScreenHeading from './ScreenHeading.jsx';
+import OrganizerRegistrations from './OrganizerRegistrations.jsx';
 import './organizer.css';
 
 /** Dados privados da organizacao. Nunca usa a lista publica como substituto. */
@@ -230,6 +231,7 @@ export default function OrganizerWorkspace({user, csrf, onCatalogRefresh}){
                   <button type="button" disabled={busy}
                     onClick={()=>synchronizeActivity(a.atividade_id)}>Tentar publicar</button>}
               </div>
+              {a.publicada&&<OrganizerRegistrations key={a.atividade_id} activityId={a.atividade_id} title={a.titulo}/>}
               {editingActivity===a.atividade_id&&<form className="eh-manager-rename" onSubmit={e=>renameActivity(e,a.atividade_id)}>
                 <label htmlFor={'rename-'+a.atividade_id}>Novo título da atividade</label>
                 <input id={'rename-'+a.atividade_id} value={activityRename} required
