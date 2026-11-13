@@ -4,6 +4,14 @@ Plataforma de eventos em evolução como **produto real**, originalmente desenvo
 
 **Fonte canônica:** repositório privado `Boanerges20297/eventhub`, branch `main`. Desenvolvimento no STI01 por NEXO; **notebook e containers locais somente na etapa final autorizada**, após refinamento das telas, contratos e documentação. Não iniciar publicação pública implícita.
 
+## Homologação local e apresentação — 12–13/11/2026
+
+- O notebook foi conciliado por fast-forward com `origin/main` no commit `0778cf5`, preservando o backup de alterações locais. Segurança: OTP simulado em laboratório, dispositivo confiável, sessões e bloqueio após três tentativas incorretas.
+- A tela de autenticação personalizada foi integrada à verificação OTP (sem voltar ao formulário provisório).
+- Os logins de demonstração de **admin**, **organizer** e **participant** foram exercitados por HTTP real, com senha, OTP, sessão e logout. Credenciais permanecem **somente no notebook**, em `docs/TESTE_MOCK_ACESSOS_LOCAL.md` (ignorado pelo Git).
+- Roteiro: [Apresentação e testes de 13/11](docs/APRESENTACAO_2026-11-13.md). Evidências: [Checkpoint integrado de 12/11](docs/CHECKPOINT_INTEGRACAO_SECURITY_2026-11-12.md). O resultado dos testes de backend não dispensa a homologação visual do navegador.
+- Não há pagamentos, SMS, e-mails transacionais ou implantação pública reais.
+
 ## Situação em 04/11/2026
 
 - **Cinco microsserviços implementados:** Identidade, Eventos, Inscrições, Pagamentos **simulados** e Notificações **simuladas**, combinando Node/Fastify e Python/FastAPI.

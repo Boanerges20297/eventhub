@@ -23,7 +23,7 @@ class PreviewHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         route = self.path.split("?", 1)[0]
         mock = {
-            "/api/auth/me": {"user": {"id": "demo-user", "role": PREVIEW_ROLE, "org_id": "org-demo"}, "csrf": "preview-only"},
+            "/api/auth/me": {"user": None if PREVIEW_ROLE == "guest" else {"id": "demo-user", "role": PREVIEW_ROLE, "org_id": "org-demo"}, "csrf": "preview-only"},
             "/api/eventos/ev-demo-001/atividades": {"atividades": [
                 {"atividade_id": "act-demo-001", "titulo": "Laboratório de inovação",
                  "capacidade": 48, "gratuita": True, "preco_centavos": 0},

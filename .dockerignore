@@ -11,3 +11,4 @@
 **/*.sqlite
 **/*.sqlite3
 docs
+/.demo-credentials.local.json

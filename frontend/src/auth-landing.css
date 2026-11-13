@@ -1,0 +1,119 @@
+/* EventHub sign-in — azul/índigo/ciano da marca, sem dependências externas. */
+.eh-auth-landing{--ah-navy:#0f204f;--ah-indigo:#243bba;--ah-blue:#2445c3;--ah-cyan:#09b9d7;color:#152346;max-width:1350px;margin:0 auto;min-width:0;padding:0 28px}
+.eh-auth-brandbar{min-height:92px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+.eh-auth-brand{display:inline-flex;align-items:center;gap:9px;text-decoration:none;font-size:27px;font-weight:860;letter-spacing:-1.2px;color:#101c3b}
+.eh-auth-brand>span>span{color:#2445c3}
+.eh-auth-brand svg{flex:0 0 auto}
+.eh-auth-catalog-link{border:1px solid #dae3f5;border-radius:999px;padding:11px 17px;font-weight:740;font-size:12px;color:#263e83;text-decoration:none;background:#fff;display:inline-flex;align-items:center;gap:13px}
+.eh-auth-catalog-link:hover{background:#edf3ff}
+.eh-auth-layout{display:grid;grid-template-columns:minmax(0,1.06fr) minmax(390px,.94fr);min-height:min(705px,calc(100vh - 144px));border:1px solid #dfe6f2;background:#fff;border-radius:24px;box-shadow:0 26px 72px #132d5b10;overflow:hidden}
+.eh-auth-showcase{display:flex;flex-direction:column;position:relative;overflow:hidden;isolation:isolate;padding:54px 49px 34px;background:linear-gradient(134deg,#121a52 2%,#2039a7 49%,#07689e 83%,#06b6cf 130%);color:#fff}
+.eh-auth-showcase::before{content:'';position:absolute;inset:-20% -32%;background:radial-gradient(ellipse at 83% 61%,#49ccf549,transparent 30%),radial-gradient(ellipse at 19% 92%,#4237c971,transparent 46%);pointer-events:none;z-index:-1}
+.eh-auth-showcase::after{content:'';position:absolute;width:550px;height:550px;border:1px solid #ffffff22;right:-330px;bottom:-170px;transform:rotate(-35deg);border-radius:42%;pointer-events:none}
+.eh-auth-sheen{position:absolute;inset:0;background-image:linear-gradient(90deg,#ffffff07 1px,transparent 1px),linear-gradient(#ffffff07 1px,transparent 1px);background-size:65px 65px;opacity:.44;mask-image:linear-gradient(180deg,transparent 7%,#000 100%);pointer-events:none}
+.eh-auth-showcase-copy{position:relative;z-index:1}
+.eh-auth-eyebrow{font-size:10px;font-weight:850;letter-spacing:2.15px;display:inline-flex;align-items:center;gap:10px;color:#c4e8ff}
+.eh-auth-pulse{width:9px;height:9px;border-radius:50%;background:#5ce8e8;box-shadow:0 0 0 5px #5ce8e824}
+.eh-auth-showcase h1{font-size:clamp(32px,3.4vw,50px);line-height:1.12;margin:28px 0 18px;letter-spacing:-1.85px;font-weight:840;max-width:545px;text-wrap:balance}
+.eh-auth-showcase h1 span{color:#9cf1fc}
+.eh-auth-showcase-copy>p{margin:0;max-width:480px;color:#d7e8fd;font-size:13px;line-height:1.85}
+.eh-auth-illustration{height:270px;position:relative;max-width:520px;width:100%;margin:20px auto 10px;flex:1;min-height:235px}
+.eh-auth-halo{position:absolute;border-radius:50%;border:1px solid #ffffff29;left:50%;top:48%;transform:translate(-50%,-50%) rotate(-16deg)}
+.eh-auth-halo-one{width:430px;height:205px}
+.eh-auth-halo-two{width:570px;height:285px}
+.eh-auth-ticket{position:absolute;width:230px;height:187px;left:50%;top:50%;transform:translate(-50%,-49%) rotate(-10deg);border-radius:17px;background:linear-gradient(150deg,#ffffff 0%,#e8f4ff 52%,#c6ebff 100%);box-shadow:0 26px 54px #08123f85,0 0 0 7px #ffffff17;overflow:hidden;color:#1d3584}
+.eh-auth-ticket::before,.eh-auth-ticket::after{content:'';width:21px;height:21px;background:#1d42a9;border-radius:50%;position:absolute;top:57%;z-index:2}
+.eh-auth-ticket::before{left:-12px}.eh-auth-ticket::after{right:-12px}
+.eh-auth-ticket-header{display:flex;justify-content:space-between;gap:6px;border-bottom:1px dashed #7996c1;font-size:8px;font-weight:850;letter-spacing:1.2px;padding:15px 17px 11px}
+.eh-auth-ticket-header span:last-child{font-size:7px;letter-spacing:.7px;color:#7186a7}
+.eh-auth-ticket-symbol{display:grid;place-items:center;height:107px;filter:drop-shadow(0 5px 5px #2d4eb122)}
+.eh-auth-ticket-baseline{padding:0 17px;display:flex;align-items:center;justify-content:space-between;color:#637cac;font-weight:800;letter-spacing:.2px;font-size:9px}
+.eh-auth-ticket-baseline span:last-child{font-size:22px;color:#009fbb}
+.eh-auth-float{display:flex;align-items:center;gap:11px;background:#ffffffef;box-shadow:0 13px 38px #10194b61;border:1px solid #ffffffb3;padding:12px 15px;border-radius:13px;color:#172e61;position:absolute;z-index:1;max-width:280px}
+.eh-auth-float strong,.eh-auth-float small{display:block}.eh-auth-float strong{font-size:11px;white-space:nowrap}.eh-auth-float small{font-size:9px;margin-top:4px;color:#607a9f;white-space:nowrap}
+.eh-auth-float-top{top:5%;right:0;transform:rotate(3deg)}.eh-auth-float-bottom{bottom:1%;left:0;transform:rotate(-3deg)}
+.eh-auth-float-icon{font-size:22px;color:#2d48c8}.eh-auth-float-check{border-radius:50%;width:32px;height:32px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#2a52c8,#05bed4);font-size:17px}
+.eh-auth-showcase-footer{position:relative;z-index:1;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:10px;color:#bfd8f3;letter-spacing:.2px;padding-top:13px;margin-top:auto}
+.eh-auth-footer-marker{font-size:16px;color:#80e8f6;margin-right:4px}.eh-auth-showcase-dot{width:4px;height:4px;border-radius:50%;background:#94c1ed}
+.eh-auth-access{background:linear-gradient(180deg,#fff 0%,#fdfdff 100%);display:grid;align-items:center;min-width:0;padding:56px clamp(28px,4.4vw,74px)}
+.eh-auth-access-inner{width:100%;max-width:418px;margin:auto}
+.eh-auth-form-overline{color:#3552bb;letter-spacing:1.8px;font-size:10px;font-weight:850;display:block;margin-bottom:12px}
+.eh-auth-access h2{font-size:clamp(29px,3vw,40px);line-height:1.17;letter-spacing:-1.3px;color:#152449;margin:0;font-weight:830}
+.eh-auth-description{font-size:13px;color:#687b91;line-height:1.7;margin:13px 0 28px}
+.eh-auth-mode-selector{display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:4px;border-radius:12px;background:#eff3fa;margin-bottom:26px}
+.eh-app .eh-auth-mode-selector button{border-radius:9px!important;background:transparent!important;color:#6a7794!important;padding:11px!important;min-height:42px;margin:0!important;box-shadow:none!important;font-weight:740}
+.eh-app .eh-auth-mode-selector button.is-selected{background:#fff!important;color:#2443a8!important;box-shadow:0 3px 13px #182b6613!important}
+.eh-auth-form{display:flex;flex-direction:column}
+.eh-app .eh-auth-form label{margin:0 0 8px;font-size:12px;font-weight:780;color:#2b3e64}
+.eh-app .eh-auth-form input{width:100%;max-width:100%!important;min-height:49px;min-width:0;margin:0 0 21px!important;border:1px solid #d5dfed!important;border-radius:10px!important;background:#fff!important;color:#19294e!important;font-size:13px!important;padding:13px 15px!important;box-shadow:0 1px 3px #1b305206}
+.eh-auth-form input::placeholder{color:#9aa8bd}
+.eh-app .eh-auth-form input:focus{outline:3px solid #c5e4ff;outline-offset:1px;border-color:#5585da!important}
+.eh-auth-password-wrap{position:relative;min-width:0}
+.eh-app .eh-auth-password-wrap input{padding-right:91px!important}
+.eh-app button.eh-auth-reveal{position:absolute;right:6px;top:5px;background:transparent!important;color:#43639f!important;font-weight:740;padding:8px!important;border:0!important;min-height:39px;margin:0!important;font-size:11px}
+.eh-auth-field-hint{font-size:11px;color:#7689a1;margin:-10px 0 16px;line-height:1.45}
+.eh-app button.eh-auth-submit{width:100%;min-height:51px!important;border-radius:11px!important;color:#fff!important;padding:13px 17px!important;background:linear-gradient(100deg,#263db9,#245ad8)!important;box-shadow:0 10px 24px #2445c328!important;display:flex;align-items:center;justify-content:center;gap:14px;position:relative;font-size:13px!important;font-weight:800;margin:6px 0 0!important}
+.eh-auth-submit span{position:absolute;right:19px;font-size:21px;line-height:1}
+.eh-app button.eh-auth-submit:hover{background:linear-gradient(100deg,#2636a2,#2251c1)!important;box-shadow:0 14px 27px #2445c33e!important}
+.eh-auth-change-mode{text-align:center;font-size:12px;color:#7888a0;margin:24px 0}
+.eh-app button.eh-auth-change-mode,.eh-app .eh-auth-change-mode button{background:transparent!important;box-shadow:none!important;color:#2445c3!important;font-weight:800;border:0!important;margin:0!important;padding:0!important;min-height:0;font-size:12px}
+.eh-auth-feedback{background:#edf3ff;border-left:3px solid #3553cb;padding:12px 13px;border-radius:8px;margin:0 0 18px;color:#274072;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.eh-auth-trust{display:flex;gap:10px;align-items:center;border-top:1px solid #edf1f7;padding-top:18px;color:#8190a7;margin-top:15px}
+.eh-auth-trust span{color:#337bc9;font-size:22px}.eh-auth-trust p{font-size:11px;margin:0;line-height:1.5}
+.eh-auth-bottom{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;color:#728096;font-size:11px;padding:19px 2px 22px}
+.eh-page-public{max-width:none!important;padding:0!important}
+.eh-page-public>.eh-catalog-panel{max-width:1294px;margin:20px auto 50px!important}
+@media(max-width:1090px){
+  .eh-auth-landing{padding:0 18px}
+  .eh-auth-layout{grid-template-columns:minmax(0,1fr) minmax(350px,.92fr);min-height:610px}
+  .eh-auth-showcase{padding:46px 28px 26px}
+  .eh-auth-access{padding:42px 28px}
+  .eh-auth-showcase h1{font-size:36px}
+  .eh-auth-float{padding:9px 10px}
+  .eh-auth-float strong{font-size:10px}.eh-auth-float small{font-size:8px}
+}
+@media(max-width:760px){
+  .eh-auth-brandbar{min-height:72px}
+  .eh-auth-brand{font-size:23px}.eh-auth-brand svg{width:41px;height:39px}
+  .eh-auth-layout{display:flex;flex-direction:column;min-height:0;border-radius:18px}
+  .eh-auth-showcase{padding:35px 26px 25px}
+  .eh-auth-showcase h1{font-size:clamp(28px,6vw,39px);margin:19px 0 12px}
+  .eh-auth-showcase-copy>p{font-size:12px;line-height:1.65;max-width:580px}
+  .eh-auth-illustration{height:150px;min-height:150px;max-width:370px;margin:9px auto 10px}
+  .eh-auth-ticket{width:164px;height:139px;border-radius:12px}
+  .eh-auth-ticket-header{padding:11px 12px 7px;font-size:6px}.eh-auth-ticket-symbol{height:74px}.eh-auth-ticket-symbol svg{width:70px;height:70px}.eh-auth-ticket-baseline{font-size:7px}
+  .eh-auth-halo-one{width:290px;height:110px}.eh-auth-halo-two{width:390px;height:200px}
+  .eh-auth-float{padding:8px 9px;gap:7px}.eh-auth-float strong{font-size:9px}.eh-auth-float small{font-size:7px}
+  .eh-auth-float-bottom{bottom:-4px}.eh-auth-showcase-footer{font-size:9px}
+  .eh-auth-access{padding:32px 27px 34px}
+  .eh-auth-access-inner{max-width:480px}
+  .eh-auth-description{margin-bottom:21px}
+  .eh-auth-bottom{font-size:10px;padding:15px 2px}
+  .eh-page-public>.eh-catalog-panel{margin:17px 16px 35px!important}
+}
+@media(max-width:420px){
+  .eh-auth-landing{padding:0 11px}
+  .eh-auth-brandbar{min-height:68px}
+  .eh-auth-catalog-link{font-size:10px;padding:9px 11px;gap:7px}
+  .eh-auth-brand{font-size:21px;gap:5px}.eh-auth-brand svg{width:36px;height:35px}
+  .eh-auth-showcase{padding:27px 22px 22px}
+  .eh-auth-showcase h1{font-size:29px;letter-spacing:-1.2px}
+  .eh-auth-eyebrow{font-size:8px;letter-spacing:1.4px}
+  .eh-auth-float-top{right:-6px;top:-3px}.eh-auth-float-bottom{left:-3px}
+  .eh-auth-float strong{font-size:8px}.eh-auth-float small{display:none}.eh-auth-float-check{width:24px;height:24px;font-size:12px}
+  .eh-auth-illustration{min-height:123px;height:123px}.eh-auth-ticket{height:120px;width:144px}.eh-auth-ticket-symbol{height:58px}.eh-auth-ticket-symbol svg{height:59px;width:59px}
+  .eh-auth-showcase-footer{line-height:1.5}.eh-auth-showcase-dot{display:none}
+  .eh-auth-access{padding:28px 19px 31px}
+  .eh-auth-access h2{font-size:29px}
+  .eh-auth-bottom{gap:5px}
+  .eh-page-public>.eh-catalog-panel{margin:12px 10px 28px!important}
+}
+@media(prefers-reduced-motion:reduce){.eh-auth-landing *{scroll-behavior:auto;transition:none}}
+
+/* MFA: manter legibilidade e acessibilidade na identidade visual. */
+.eh-auth-form > input#eh-auth-otp { width:100%;box-sizing:border-box; }
+.eh-auth-trust-check { display:flex;gap:10px;align-items:center;margin:12px 0;font-weight:500; }
+.eh-auth-trust-check input { width:18px;height:18px;flex-shrink:0;accent-color:#164f78; }
+.eh-auth-secondary { display:block;width:100%;border:1px solid #bac7d6;background:transparent;
+  color:inherit;border-radius:9px;padding:11px 14px;margin-top:9px;cursor:pointer;font:inherit; }
+.eh-auth-secondary:focus-visible { outline:3px solid #2563eb;outline-offset:2px; }

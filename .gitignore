@@ -1,4 +1,4 @@
-﻿.env
+.env
 .env.*
 !.env.example
 __pycache__/
@@ -29,3 +29,7 @@ coverage/
 
 # Temporary local MySQL test data (never commit)
 /.runtime/
+/.demo-credentials.local.json
+/docs/TESTE_MOCK_ACESSOS.md
+/docs/TESTE_MOCK_ACESSOS_LOCAL.md
+/docs/eventhub-login-*-2026-11-04.png

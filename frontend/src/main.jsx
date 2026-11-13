@@ -5,6 +5,7 @@ import EventHubMark from './EventHubMark.jsx';
 import {requestApi,routes} from './api.js';
 import ScreenHeading from './ScreenHeading.jsx';
 import OrganizerWorkspace from './OrganizerWorkspace.jsx';
+import AuthLanding from './AuthLanding.jsx';
 
 function App(){
   const [user,setUser]=useState(null);
@@ -259,11 +260,11 @@ function App(){
         </aside>
       </div>}
       <div className="eh-main">
-        <header className={'eh-topbar'+(user?' eh-auth-topbar':'')}>
+        {user&&<header className="eh-topbar">
           <div><span className="eh-heading-overline">EVENTHUB / WORKSPACE</span><h1>{user?'Painel de eventos':'EventHub'}</h1><p>Plataforma de eventos, programacao e inscricoes</p></div>
           {user&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="eh-outline" style={button} onClick={forgetDevice}>Esquecer aparelho</button><button className="eh-outline" style={button} onClick={logout}>Sair</button></div>}
-        </header>
-        <div className="eh-page" id="visao-geral">
+        </header>}
+        <div className={'eh-page'+(!user?' eh-page-public':'')} id="visao-geral">
           {user&&activeView==='visao-geral'&&<section className="eh-feature" aria-label="Destaque">
             <div className="eh-feature-copy">
               <span className="eh-kicker"><span className="eh-kicker-dot"></span> CONECTE PESSOAS E EXPERIÊNCIAS</span>
@@ -284,45 +285,16 @@ function App(){
             <div className="eh-stat"><span className="eh-stat-mark">◫</span><span className="eh-stat-label">Atividades publicadas</span><strong className="eh-stat-number">{events.reduce((total,ev)=>total+Number(ev.atividades||0),0)}</strong><span className="eh-stat-hint">Total anunciado pelos eventos</span></div>
             {participant&&<div className="eh-stat"><span className="eh-stat-mark">♧</span><span className="eh-stat-label">Minhas inscrições recentes</span><strong className="eh-stat-number">{myTickets.length}</strong><span className="eh-stat-hint">Até 50 carregadas</span></div>}
           </div>}
-          {message&&<p className="eh-notice" role="status" style={{...box,background:'#eaf1f6'}}>{message}</p>}
-      {!user&&<section className="eh-panel" style={{...box,maxWidth:460,margin:'0 auto'}}>
-        <ScreenHeading eyebrow="ACESSO EVENTHUB"
-          title={mode==='verify'?'Confirme seu acesso':mode==='login'?'Entre no seu espaço':'Sua jornada começa aqui'}
-          description={mode==='verify'?'Confirme o codigo temporario para continuar. No ambiente local voce pode preencher o codigo de teste automaticamente.':mode==='login'?'Continue de onde parou, com eventos e inscrições vinculados à sua conta.':'Crie sua conta para participar das próximas experiências.'}/>
-        <form className="eh-editor-form" onSubmit={login}>
-          {mode==='verify'?<>
-            <label>Codigo de verificacao (6 digitos)
-              <input style={input} inputMode="numeric" autoComplete="one-time-code"
-                pattern="[0-9]{6}" maxLength={6} value={otpCode}
-                onChange={e=>setOtpCode(e.target.value.replace(/[^0-9]/g,'').slice(0,6))} required/>
-            </label>
-            <label style={{display:'flex',alignItems:'center',gap:10}}>
-              <input type="checkbox" checked={trustDevice}
-                onChange={e=>setTrustDevice(e.target.checked)}/>
-              Confiar neste aparelho por 30 dias
-            </label>
-            <button style={button} type="submit">Confirmar OTP</button>
-            {simulationCode && <button style={{...button,background:'#5e7080'}}
-              type="button" onClick={()=>setOtpCode(simulationCode)}>
-              Preencher codigo de teste
-            </button>}
-            <button style={{...button,background:'#5e7080'}} type="button"
-              onClick={()=>{setOtpChallenge('');setOtpCode('');setSimulationCode('');setMode('login');setMessage('');}}>Cancelar</button>
-          </>:<>
-            <label>E-mail<input style={input} type="email" autoComplete="username"
-              value={email} onChange={e=>setEmail(e.target.value)} required/></label>
-            <label>Senha (minimo 12 caracteres)<input style={input} type="password"
-              autoComplete={mode==='register'?'new-password':'current-password'}
-              value={password} onChange={e=>setPassword(e.target.value)}
-              required minLength={mode==='register'?12:1}/></label>
-            <button style={button} type="submit">{mode==='login'?'Entrar':'Cadastrar'}</button>
-            <button style={{...button,background:'#5e7080'}} type="button"
-              onClick={()=>setMode(mode==='login'?'register':'login')}>
-              {mode==='login'?'Criar conta':'Voltar ao login'}
-            </button>
-          </>}
-        </form>
-      </section>}
+          {user&&message&&<p className="eh-notice" role="status" style={{...box,background:'#eaf1f6'}}>{message}</p>}
+      {!user&&<AuthLanding
+        mode={mode} email={email} password={password} message={message} events={events}
+        otpCode={otpCode} simulationCode={simulationCode} trustDevice={trustDevice}
+        onEmailChange={setEmail} onPasswordChange={setPassword} onModeChange={setMode}
+        onOtpChange={setOtpCode} onTrustDeviceChange={setTrustDevice}
+        onCancelVerify={()=>{setOtpChallenge('');setOtpCode('');setSimulationCode('');setTrustDevice(false);setMode('login');setMessage('');}}
+        onSubmit={login}
+      />}
+
       {organizer&&activeView==='organizacao'&&<OrganizerWorkspace user={user} csrf={csrf} onCatalogRefresh={refreshEvents}/>}
       {(!user||activeView==='eventos')&&<section id="eventos" className="eh-panel eh-catalog-panel" style={{...box,marginTop:18}}>
         <ScreenHeading eyebrow="CATÁLOGO EVENTHUB" title="Experiências para descobrir"
